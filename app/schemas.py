@@ -56,6 +56,10 @@ class ComplaintCreate(BaseModel):
     status: ComplaintStatus = "open"
 
 
+class ComplaintUpdate(BaseModel):
+    status: ComplaintStatus
+
+
 class Complaint(BaseModel):
     id: int
     agent_id: int
@@ -85,3 +89,8 @@ class AgentPassport(BaseModel):
     actions_history: list[AgentEvent]
     complaints: list[Complaint]
     audit_log: list[dict[str, Any]]
+
+
+class DemoResetResponse(BaseModel):
+    status: Literal["reset"]
+    agents_seeded: int

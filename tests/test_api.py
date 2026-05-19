@@ -59,6 +59,21 @@ def test_agent_passport_flow() -> None:
         list_response = client.get("/agents")
         assert list_response.status_code == 200
         assert len(list_response.json()) == 1
+
+        update_response = client.patch(
+            f"/agents/{agent_id}/complaints/{complaint_response.json()['id']}",
+            json={"status": "confirmed"},
+        )
+        assert update_response.status_code == 200
+        assert update_response.json()["status"] == "confirmed"
+
+        reset_response = client.post("/demo/reset")
+        assert reset_response.status_code == 200
+        assert reset_response.json() == {"status": "reset", "agents_seeded": 3}
+
+        seeded_agents_response = client.get("/agents")
+        assert seeded_agents_response.status_code == 200
+        assert len(seeded_agents_response.json()) == 3
     finally:
         app.dependency_overrides.clear()
         db.close()

@@ -5,7 +5,7 @@ import sqlite3
 from typing import Any
 
 from app.reputation import ReputationComplaint, ReputationEvent, calculate_reputation
-from app.schemas import AgentCreate, AgentEventCreate, ComplaintCreate
+from app.schemas import AgentCreate, AgentEventCreate, ComplaintCreate, ComplaintUpdate
 
 
 def create_agent(db: sqlite3.Connection, payload: AgentCreate) -> dict[str, Any]:
@@ -36,6 +36,11 @@ def list_agents(db: sqlite3.Connection) -> list[dict[str, Any]]:
 def get_agent_or_none(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | None:
     row = db.execute("SELECT * FROM agents WHERE id = ?", (agent_id,)).fetchone()
     return dict(row) if row else None
+
+
+def count_agents(db: sqlite3.Connection) -> int:
+    row = db.execute("SELECT COUNT(*) AS count FROM agents").fetchone()
+    return int(row["count"])
 
 
 def create_event(db: sqlite3.Connection, agent_id: int, payload: AgentEventCreate) -> dict[str, Any]:
@@ -105,7 +110,32 @@ def list_complaints(db: sqlite3.Connection, agent_id: int) -> list[dict[str, Any
 
 def get_complaint(db: sqlite3.Connection, complaint_id: int) -> dict[str, Any]:
     row = db.execute("SELECT * FROM complaints WHERE id = ?", (complaint_id,)).fetchone()
-    return dict(row)
+    return dict(row) if row else None
+
+
+def update_complaint(db: sqlite3.Connection, complaint_id: int, payload: ComplaintUpdate) -> dict[str, Any] | None:
+    existing = get_complaint(db, complaint_id)
+    if not existing:
+        return None
+
+    db.execute("UPDATE complaints SET status = ? WHERE id = ?", (payload.status, complaint_id))
+    add_audit_log(
+        db,
+        existing["agent_id"],
+        "complaint.reviewed",
+        {"complaint_id": complaint_id, "old_status": existing["status"], "new_status": payload.status},
+    )
+    db.commit()
+    return get_complaint(db, complaint_id)
+
+
+def reset_demo_data(db: sqlite3.Connection) -> None:
+    db.execute("DELETE FROM audit_log")
+    db.execute("DELETE FROM complaints")
+    db.execute("DELETE FROM agent_events")
+    db.execute("DELETE FROM agents")
+    db.execute("DELETE FROM sqlite_sequence WHERE name IN ('audit_log', 'complaints', 'agent_events', 'agents')")
+    db.commit()
 
 
 def list_audit_log(db: sqlite3.Connection, agent_id: int) -> list[dict[str, Any]]:

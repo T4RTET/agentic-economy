@@ -1,14 +1,19 @@
+import sqlite3
+
 from app.database import connect, init_db
-from app.repositories import create_agent, create_complaint, create_event, list_agents
+from app.repositories import create_agent, create_complaint, create_event, list_agents, reset_demo_data
 from app.schemas import AgentCreate, AgentEventCreate, ComplaintCreate
 
 
-def seed_demo_data() -> None:
-    db = connect()
+def seed_demo_data(reset: bool = False, connection: sqlite3.Connection | None = None) -> int:
+    db = connection or connect()
+    owns_connection = connection is None
     try:
         init_db(db)
+        if reset:
+            reset_demo_data(db)
         if list_agents(db):
-            return
+            return len(list_agents(db))
 
         low_risk = create_agent(
             db,
@@ -50,8 +55,10 @@ def seed_demo_data() -> None:
         create_event(db, high_risk["id"], AgentEventCreate(title="Reported stale pool data", category="data", outcome="failed", value_usd=0))
         create_complaint(db, high_risk["id"], ComplaintCreate(reason="Agent recommended an unsafe wallet limit for a volatile strategy.", severity="high", status="confirmed"))
         create_complaint(db, high_risk["id"], ComplaintCreate(reason="User disputed the agent's explanation of risk.", severity="medium", status="open"))
+        return len(list_agents(db))
     finally:
-        db.close()
+        if owns_connection:
+            db.close()
 
 
 if __name__ == "__main__":

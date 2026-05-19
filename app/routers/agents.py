@@ -13,6 +13,7 @@ from app.schemas import (
     AgentSummary,
     Complaint,
     ComplaintCreate,
+    ComplaintUpdate,
     Reputation,
 )
 
@@ -69,6 +70,22 @@ def post_agent_complaint(
 ) -> Complaint:
     _require_agent(db, agent_id)
     return repositories.create_complaint(db, agent_id, payload)
+
+
+@router.patch("/{agent_id}/complaints/{complaint_id}", response_model=Complaint)
+def patch_agent_complaint(
+    agent_id: int,
+    complaint_id: int,
+    payload: ComplaintUpdate,
+    db: sqlite3.Connection = Depends(get_db),
+) -> Complaint:
+    _require_agent(db, agent_id)
+    complaint = repositories.get_complaint(db, complaint_id)
+    if not complaint or complaint["agent_id"] != agent_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Complaint not found")
+
+    updated = repositories.update_complaint(db, complaint_id, payload)
+    return updated
 
 
 def _require_agent(db: sqlite3.Connection, agent_id: int) -> dict:

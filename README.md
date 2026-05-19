@@ -33,7 +33,11 @@ http://127.0.0.1:8000/docs
 - `GET /agents/{agent_id}/passport`
 - `POST /agents/{agent_id}/events`
 - `POST /agents/{agent_id}/complaints`
+- `PATCH /agents/{agent_id}/complaints/{complaint_id}`
 - `GET /agents/{agent_id}/reputation`
+- `POST /demo/reset`
+
+See `API_CONTRACT.md` for frontend integration details.
 
 ## Tests
 
