@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from typing import Any
 
 from app.reputation import ReputationComplaint, ReputationEvent, calculate_reputation
-from app.schemas import AgentCreate, AgentEventCreate, ComplaintCreate, ComplaintUpdate
+from app.schemas import (
+    AgentCreate,
+    AgentEventCreate,
+    ComplaintCreate,
+    ComplaintUpdate,
+    MarketplaceListingCreate,
+    RentalCreate,
+)
 
 
 def create_agent(db: sqlite3.Connection, payload: AgentCreate) -> dict[str, Any]:
@@ -131,11 +139,214 @@ def update_complaint(db: sqlite3.Connection, complaint_id: int, payload: Complai
 
 def reset_demo_data(db: sqlite3.Connection) -> None:
     db.execute("DELETE FROM audit_log")
+    db.execute("DELETE FROM rentals")
+    db.execute("DELETE FROM marketplace_listings")
     db.execute("DELETE FROM complaints")
     db.execute("DELETE FROM agent_events")
     db.execute("DELETE FROM agents")
-    db.execute("DELETE FROM sqlite_sequence WHERE name IN ('audit_log', 'complaints', 'agent_events', 'agents')")
+    db.execute(
+        """
+        DELETE FROM sqlite_sequence
+        WHERE name IN ('audit_log', 'rentals', 'marketplace_listings', 'complaints', 'agent_events', 'agents')
+        """
+    )
     db.commit()
+
+
+def create_or_update_listing(
+    db: sqlite3.Connection,
+    agent_id: int,
+    payload: MarketplaceListingCreate,
+) -> dict[str, Any]:
+    capabilities_json = json.dumps(payload.capabilities)
+    existing = get_listing_by_agent(db, agent_id)
+    if existing:
+        db.execute(
+            """
+            UPDATE marketplace_listings
+            SET pricing_model = ?, price_usd = ?, price_token = ?, availability = ?,
+                capabilities_json = ?, terms = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE agent_id = ?
+            """,
+            (
+                payload.pricing_model,
+                payload.price_usd,
+                payload.price_token,
+                payload.availability,
+                capabilities_json,
+                payload.terms,
+                agent_id,
+            ),
+        )
+        action = "listing.updated"
+    else:
+        db.execute(
+            """
+            INSERT INTO marketplace_listings
+            (agent_id, pricing_model, price_usd, price_token, availability, capabilities_json, terms)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                agent_id,
+                payload.pricing_model,
+                payload.price_usd,
+                payload.price_token,
+                payload.availability,
+                capabilities_json,
+                payload.terms,
+            ),
+        )
+        action = "listing.created"
+    add_audit_log(db, agent_id, action, {"pricing_model": payload.pricing_model, "price_usd": payload.price_usd})
+    db.commit()
+    return get_listing_by_agent(db, agent_id)
+
+
+def list_marketplace_cards(db: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = db.execute(
+        """
+        SELECT agents.*
+        FROM agents
+        JOIN marketplace_listings ON marketplace_listings.agent_id = agents.id
+        ORDER BY marketplace_listings.availability ASC, agents.created_at DESC, agents.id DESC
+        """
+    ).fetchall()
+    return [
+        {
+            "agent": dict(row),
+            "reputation": build_reputation(db, row["id"]),
+            "marketplace": build_marketplace_info(db, row["id"]),
+        }
+        for row in rows
+    ]
+
+
+def get_listing_by_agent(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | None:
+    row = db.execute("SELECT * FROM marketplace_listings WHERE agent_id = ?", (agent_id,)).fetchone()
+    return _listing_from_row(row) if row else None
+
+
+def get_listing(db: sqlite3.Connection, listing_id: int) -> dict[str, Any] | None:
+    row = db.execute("SELECT * FROM marketplace_listings WHERE id = ?", (listing_id,)).fetchone()
+    return _listing_from_row(row) if row else None
+
+
+def create_rental(db: sqlite3.Connection, listing_id: int, payload: RentalCreate) -> dict[str, Any] | None:
+    listing = get_listing(db, listing_id)
+    if not listing or listing["availability"] != "available":
+        return None
+
+    agreed_price = _calculate_rental_price(listing, payload.duration_hours)
+    cursor = db.execute(
+        """
+        INSERT INTO rentals
+        (listing_id, agent_id, renter_wallet, task_title, task_description, duration_hours, agreed_price_usd, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
+        """,
+        (
+            listing_id,
+            listing["agent_id"],
+            payload.renter_wallet,
+            payload.task_title,
+            payload.task_description,
+            payload.duration_hours,
+            agreed_price,
+        ),
+    )
+    db.execute(
+        "UPDATE marketplace_listings SET availability = 'rented', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (listing_id,),
+    )
+    add_audit_log(
+        db,
+        listing["agent_id"],
+        "rental.created",
+        {"listing_id": listing_id, "task_title": payload.task_title, "agreed_price_usd": agreed_price},
+    )
+    db.commit()
+    return get_rental(db, cursor.lastrowid)
+
+
+def get_rental(db: sqlite3.Connection, rental_id: int) -> dict[str, Any] | None:
+    row = db.execute("SELECT * FROM rentals WHERE id = ?", (rental_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def complete_rental(db: sqlite3.Connection, rental_id: int) -> dict[str, Any] | None:
+    rental = get_rental(db, rental_id)
+    if not rental or rental["status"] not in {"pending", "active"}:
+        return None
+
+    db.execute(
+        "UPDATE rentals SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (rental_id,),
+    )
+    db.execute(
+        "UPDATE marketplace_listings SET availability = 'available', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (rental["listing_id"],),
+    )
+    create_event(
+        db,
+        rental["agent_id"],
+        AgentEventCreate(
+            title=f"Completed rental: {rental['task_title']}",
+            category="marketplace-rental",
+            outcome="success",
+            value_usd=rental["agreed_price_usd"],
+            metadata={"rental_id": rental_id, "renter_wallet": rental["renter_wallet"]},
+        ),
+    )
+    add_audit_log(db, rental["agent_id"], "rental.completed", {"rental_id": rental_id})
+    db.commit()
+    return get_rental(db, rental_id)
+
+
+def dispute_rental(db: sqlite3.Connection, rental_id: int, reason: str) -> dict[str, Any] | None:
+    rental = get_rental(db, rental_id)
+    if not rental or rental["status"] not in {"pending", "active", "completed"}:
+        return None
+
+    db.execute("UPDATE rentals SET status = 'disputed' WHERE id = ?", (rental_id,))
+    db.execute(
+        "UPDATE marketplace_listings SET availability = 'available', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (rental["listing_id"],),
+    )
+    create_complaint(
+        db,
+        rental["agent_id"],
+        ComplaintCreate(reason=reason, severity="medium", status="open"),
+    )
+    add_audit_log(db, rental["agent_id"], "rental.disputed", {"rental_id": rental_id, "reason": reason})
+    db.commit()
+    return get_rental(db, rental_id)
+
+
+def build_marketplace_info(db: sqlite3.Connection, agent_id: int) -> dict[str, Any]:
+    listing = get_listing_by_agent(db, agent_id)
+    stats = db.execute(
+        """
+        SELECT
+            COUNT(*) AS rentals_count,
+            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_rentals,
+            SUM(CASE WHEN status = 'disputed' THEN 1 ELSE 0 END) AS disputed_rentals
+        FROM rentals
+        WHERE agent_id = ?
+        """,
+        (agent_id,),
+    ).fetchone()
+    rentals_count = int(stats["rentals_count"] or 0)
+    completed = int(stats["completed_rentals"] or 0)
+    disputed = int(stats["disputed_rentals"] or 0)
+    completion_rate = round(completed / rentals_count, 2) if rentals_count else 0.0
+    return {
+        "listing": listing,
+        "stats": {
+            "rentals_count": rentals_count,
+            "completed_rentals": completed,
+            "disputed_rentals": disputed,
+            "completion_rate": completion_rate,
+        },
+    }
 
 
 def list_audit_log(db: sqlite3.Connection, agent_id: int) -> list[dict[str, Any]]:
@@ -175,3 +386,18 @@ def _audit_from_row(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
     item["details"] = json.loads(item["details"] or "{}")
     return item
+
+
+def _listing_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    item = dict(row)
+    item["capabilities"] = json.loads(item.pop("capabilities_json") or "[]")
+    return item
+
+
+def _calculate_rental_price(listing: dict[str, Any], duration_hours: int) -> float:
+    if listing["pricing_model"] == "rent_hourly":
+        return round(listing["price_usd"] * duration_hours, 2)
+    if listing["pricing_model"] == "rent_daily":
+        days = max(1, math.ceil(duration_hours / 24))
+        return round(listing["price_usd"] * days, 2)
+    return round(listing["price_usd"], 2)

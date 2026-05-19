@@ -7,6 +7,9 @@ AgentStatus = Literal["active", "paused", "retired"]
 EventOutcome = Literal["success", "failed", "error"]
 ComplaintSeverity = Literal["low", "medium", "high"]
 ComplaintStatus = Literal["open", "confirmed", "dismissed"]
+PricingModel = Literal["buy", "rent_hourly", "rent_daily", "per_task"]
+ListingAvailability = Literal["available", "rented", "paused"]
+RentalStatus = Literal["pending", "active", "completed", "disputed", "cancelled"]
 
 
 class AgentCreate(BaseModel):
@@ -78,6 +81,67 @@ class Reputation(BaseModel):
     complaint_count: int
 
 
+class MarketplaceListingCreate(BaseModel):
+    pricing_model: PricingModel
+    price_usd: float = Field(ge=0)
+    price_token: str = Field(default="USD", min_length=2, max_length=24)
+    availability: ListingAvailability = "available"
+    capabilities: list[str] = Field(default_factory=list)
+    terms: str = Field(default="", max_length=1000)
+
+
+class MarketplaceListing(BaseModel):
+    id: int
+    agent_id: int
+    pricing_model: PricingModel
+    price_usd: float
+    price_token: str
+    availability: ListingAvailability
+    capabilities: list[str]
+    terms: str
+    created_at: str
+    updated_at: str
+
+
+class MarketplaceStats(BaseModel):
+    rentals_count: int
+    completed_rentals: int
+    disputed_rentals: int
+    completion_rate: float
+
+
+class MarketplaceInfo(BaseModel):
+    listing: MarketplaceListing | None
+    stats: MarketplaceStats
+
+
+class MarketplaceCard(BaseModel):
+    agent: Agent
+    reputation: Reputation
+    marketplace: MarketplaceInfo
+
+
+class RentalCreate(BaseModel):
+    renter_wallet: str = Field(min_length=6, max_length=120)
+    task_title: str = Field(min_length=2, max_length=160)
+    task_description: str = Field(default="", max_length=1000)
+    duration_hours: int = Field(default=1, gt=0, le=720)
+
+
+class Rental(BaseModel):
+    id: int
+    listing_id: int
+    agent_id: int
+    renter_wallet: str
+    task_title: str
+    task_description: str
+    duration_hours: int
+    agreed_price_usd: float
+    status: RentalStatus
+    created_at: str
+    completed_at: str | None
+
+
 class AgentSummary(BaseModel):
     agent: Agent
     reputation: Reputation
@@ -86,6 +150,7 @@ class AgentSummary(BaseModel):
 class AgentPassport(BaseModel):
     agent: Agent
     reputation: Reputation
+    marketplace: MarketplaceInfo
     actions_history: list[AgentEvent]
     complaints: list[Complaint]
     audit_log: list[dict[str, Any]]

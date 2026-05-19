@@ -35,6 +35,12 @@ http://127.0.0.1:8000/docs
 - `POST /agents/{agent_id}/complaints`
 - `PATCH /agents/{agent_id}/complaints/{complaint_id}`
 - `GET /agents/{agent_id}/reputation`
+- `GET /marketplace/listings`
+- `POST /marketplace/agents/{agent_id}/listing`
+- `POST /marketplace/listings/{listing_id}/rent`
+- `GET /marketplace/rentals/{rental_id}`
+- `POST /marketplace/rentals/{rental_id}/complete`
+- `POST /marketplace/rentals/{rental_id}/dispute`
 - `POST /demo/reset`
 
 See `API_CONTRACT.md` for frontend integration details.

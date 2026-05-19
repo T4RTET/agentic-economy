@@ -52,6 +52,7 @@ def test_agent_passport_flow() -> None:
         assert passport_response.status_code == 200
         passport = passport_response.json()
         assert passport["agent"]["name"] == "Demo Agent"
+        assert passport["marketplace"]["listing"] is None
         assert passport["actions_history"][0]["metadata"]["counterparty"] == "demo"
         assert passport["reputation"]["trust_score"] >= 50
         assert passport["reputation"]["risk_level"] in ["Low", "Medium", "High"]
@@ -74,6 +75,65 @@ def test_agent_passport_flow() -> None:
         seeded_agents_response = client.get("/agents")
         assert seeded_agents_response.status_code == 200
         assert len(seeded_agents_response.json()) == 3
+
+
+        marketplace_response = client.get("/marketplace/listings")
+        assert marketplace_response.status_code == 200
+        listings = marketplace_response.json()
+        assert len(listings) == 3
+        assert listings[0]["marketplace"]["listing"]["capabilities"]
+
+        listing_id = next(
+            item["marketplace"]["listing"]["id"]
+            for item in listings
+            if item["marketplace"]["listing"]["availability"] == "available"
+        )
+        rental_response = client.post(
+            f"/marketplace/listings/{listing_id}/rent",
+            json={
+                "renter_wallet": "0xabcdef1234567890",
+                "task_title": "Demo marketplace task",
+                "task_description": "Find a low-risk route",
+                "duration_hours": 3,
+            },
+        )
+        assert rental_response.status_code == 201
+        rental = rental_response.json()
+        assert rental["status"] == "active"
+        assert rental["agreed_price_usd"] > 0
+
+        read_rental_response = client.get(f"/marketplace/rentals/{rental['id']}")
+        assert read_rental_response.status_code == 200
+        assert read_rental_response.json()["id"] == rental["id"]
+
+        complete_response = client.post(f"/marketplace/rentals/{rental['id']}/complete")
+        assert complete_response.status_code == 200
+        assert complete_response.json()["status"] == "completed"
+
+        completed_passport_response = client.get(f"/agents/{rental['agent_id']}/passport")
+        assert completed_passport_response.status_code == 200
+        assert completed_passport_response.json()["marketplace"]["stats"]["completed_rentals"] == 1
+
+        second_listing_id = next(
+            item["marketplace"]["listing"]["id"]
+            for item in client.get("/marketplace/listings").json()
+            if item["marketplace"]["listing"]["availability"] == "available"
+        )
+        disputed_rental_response = client.post(
+            f"/marketplace/listings/{second_listing_id}/rent",
+            json={
+                "renter_wallet": "0xabcdef1234567890",
+                "task_title": "Disputed marketplace task",
+                "duration_hours": 1,
+            },
+        )
+        disputed_rental = disputed_rental_response.json()
+        dispute_response = client.post(
+            f"/marketplace/rentals/{disputed_rental['id']}/dispute",
+            json={"reason": "The agent exceeded the agreed risk profile."},
+        )
+        assert dispute_response.status_code == 200
+        assert dispute_response.json()["status"] == "disputed"
     finally:
         app.dependency_overrides.clear()
         db.close()

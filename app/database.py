@@ -62,6 +62,36 @@ def init_db(connection: sqlite3.Connection | None = None) -> None:
                 FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS marketplace_listings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id INTEGER NOT NULL UNIQUE,
+                pricing_model TEXT NOT NULL CHECK (pricing_model IN ('buy', 'rent_hourly', 'rent_daily', 'per_task')),
+                price_usd REAL NOT NULL CHECK (price_usd >= 0),
+                price_token TEXT NOT NULL DEFAULT 'USD',
+                availability TEXT NOT NULL CHECK (availability IN ('available', 'rented', 'paused')) DEFAULT 'available',
+                capabilities_json TEXT NOT NULL DEFAULT '[]',
+                terms TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS rentals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                listing_id INTEGER NOT NULL,
+                agent_id INTEGER NOT NULL,
+                renter_wallet TEXT NOT NULL,
+                task_title TEXT NOT NULL,
+                task_description TEXT NOT NULL DEFAULT '',
+                duration_hours INTEGER NOT NULL DEFAULT 1 CHECK (duration_hours > 0),
+                agreed_price_usd REAL NOT NULL CHECK (agreed_price_usd >= 0),
+                status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'completed', 'disputed', 'cancelled')) DEFAULT 'active',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TEXT,
+                FOREIGN KEY (listing_id) REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+                FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 agent_id INTEGER,

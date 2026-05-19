@@ -40,6 +40,7 @@ def get_agent_passport(agent_id: int, db: sqlite3.Connection = Depends(get_db)) 
     return {
         "agent": agent,
         "reputation": repositories.build_reputation(db, agent_id),
+        "marketplace": repositories.build_marketplace_info(db, agent_id),
         "actions_history": repositories.list_events(db, agent_id),
         "complaints": repositories.list_complaints(db, agent_id),
         "audit_log": repositories.list_audit_log(db, agent_id),
