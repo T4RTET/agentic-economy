@@ -29,6 +29,23 @@ def test_agent_passport_flow() -> None:
         assert response.status_code == 201
         agent_id = response.json()["id"]
 
+        wallet_connect_response = client.post(
+            "/wallet/connect",
+            json={
+                "wallet_address": "0x1234567890abcdef",
+                "chain_id": 5000,
+                "agent_name": "Wallet Passport Agent",
+            },
+        )
+        assert wallet_connect_response.status_code == 200
+        wallet_passport = wallet_connect_response.json()
+        assert wallet_passport["agent"]["id"] == agent_id
+        assert wallet_passport["analysis"]["summary"].startswith("Trust Score")
+
+        wallet_get_response = client.get("/wallet/0x1234567890abcdef/passport")
+        assert wallet_get_response.status_code == 200
+        assert wallet_get_response.json()["agent"]["id"] == agent_id
+
         event_response = client.post(
             f"/agents/{agent_id}/events",
             json={
@@ -53,6 +70,7 @@ def test_agent_passport_flow() -> None:
         passport = passport_response.json()
         assert passport["agent"]["name"] == "Demo Agent"
         assert passport["marketplace"]["listing"] is None
+        assert passport["analysis"]["recommendation"]
         assert passport["actions_history"][0]["metadata"]["counterparty"] == "demo"
         assert passport["reputation"]["trust_score"] >= 50
         assert passport["reputation"]["risk_level"] in ["Low", "Medium", "High"]

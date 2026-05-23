@@ -1,5 +1,19 @@
 # Agent Reputation Passport API Contract
 
+## Product Phases
+
+Phase 1 is the current site flow:
+
+```text
+connect wallet -> find/create wallet-linked AI agent -> show agent passport
+```
+
+Phase 2 is the agent labor marketplace:
+
+```text
+browse marketplace -> rent/buy agent -> completed work updates the passport
+```
+
 Base URL for local development:
 
 ```text
@@ -12,33 +26,38 @@ Swagger/OpenAPI:
 http://127.0.0.1:8000/docs
 ```
 
-## Demo Flow
+## Phase 1 Demo Flow
 
-1. Reset demo data:
+1. Reset demo data if needed:
 
 ```http
 POST /demo/reset
 ```
 
-2. Load agent cards:
+2. Connect a wallet and get the passport:
 
 ```http
-GET /agents
+POST /wallet/connect
+Content-Type: application/json
+
+{
+  "wallet_address": "0x7a4A00000000000000000000000000000000A11a",
+  "chain_id": 5000,
+  "agent_name": "YieldPilot Alpha",
+  "agent_type": "defi-yield-agent"
+}
 ```
 
-3. Load marketplace cards:
+If the wallet already has an agent, backend returns the existing passport.
+If not, backend creates a new wallet-linked agent passport.
+
+3. Read a wallet passport directly:
 
 ```http
-GET /marketplace/listings
+GET /wallet/{wallet_address}/passport?chain_id=5000
 ```
 
-4. Open one passport:
-
-```http
-GET /agents/{agent_id}/passport
-```
-
-5. Add a completed action:
+4. Add a completed action to improve/change the passport:
 
 ```http
 POST /agents/{agent_id}/events
@@ -56,7 +75,61 @@ Content-Type: application/json
 }
 ```
 
-6. Rent an agent:
+5. Add a complaint/risk signal:
+
+```http
+POST /agents/{agent_id}/complaints
+Content-Type: application/json
+
+{
+  "reason": "Agent gave a delayed execution report.",
+  "severity": "medium",
+  "status": "open"
+}
+```
+
+6. Re-read the passport and show updated analysis:
+
+```http
+GET /agents/{agent_id}/passport
+```
+
+## Phase 1 Supporting Endpoints
+
+Load all seeded/demo agents:
+
+```http
+GET /agents
+```
+
+Open a passport by agent id:
+
+```http
+GET /agents/{agent_id}/passport
+```
+
+Confirm or dismiss a complaint:
+
+```http
+PATCH /agents/{agent_id}/complaints/{complaint_id}
+Content-Type: application/json
+
+{
+  "status": "confirmed"
+}
+```
+
+## Phase 2 Marketplace Endpoints
+
+Marketplace endpoints are available in backend, but they are not the primary site flow yet.
+
+Load marketplace cards:
+
+```http
+GET /marketplace/listings
+```
+
+Rent an agent:
 
 ```http
 POST /marketplace/listings/{listing_id}/rent
@@ -70,19 +143,19 @@ Content-Type: application/json
 }
 ```
 
-7. Complete a rental:
+Complete a rental:
 
 ```http
 POST /marketplace/rentals/{rental_id}/complete
 ```
 
-8. Read a rental:
+Read a rental:
 
 ```http
 GET /marketplace/rentals/{rental_id}
 ```
 
-9. Dispute a rental:
+Dispute a rental:
 
 ```http
 POST /marketplace/rentals/{rental_id}/dispute
@@ -90,30 +163,6 @@ Content-Type: application/json
 
 {
   "reason": "The delivered route exceeded the agreed risk profile."
-}
-```
-
-10. Add a complaint directly:
-
-```http
-POST /agents/{agent_id}/complaints
-Content-Type: application/json
-
-{
-  "reason": "Agent gave a delayed execution report.",
-  "severity": "medium",
-  "status": "open"
-}
-```
-
-11. Confirm or dismiss a complaint:
-
-```http
-PATCH /agents/{agent_id}/complaints/{complaint_id}
-Content-Type: application/json
-
-{
-  "status": "confirmed"
 }
 ```
 
@@ -155,9 +204,21 @@ Returns everything needed for the passport page:
 - `agent`
 - `reputation`
 - `marketplace`
+- `analysis`
 - `actions_history`
 - `complaints`
 - `audit_log`
+
+`analysis` is a frontend-ready explanation block:
+
+```json
+{
+  "summary": "Trust Score 82/100, Risk Level Low.",
+  "strengths": ["3 successful action(s) recorded"],
+  "risk_flags": ["No active risk flags"],
+  "recommendation": "Suitable for broader wallet permissions within the recommended limit."
+}
+```
 
 ### `GET /marketplace/listings`
 

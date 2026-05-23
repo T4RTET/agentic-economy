@@ -13,6 +13,7 @@ from app.schemas import (
     ComplaintUpdate,
     MarketplaceListingCreate,
     RentalCreate,
+    WalletConnect,
 )
 
 
@@ -44,6 +45,37 @@ def list_agents(db: sqlite3.Connection) -> list[dict[str, Any]]:
 def get_agent_or_none(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | None:
     row = db.execute("SELECT * FROM agents WHERE id = ?", (agent_id,)).fetchone()
     return dict(row) if row else None
+
+
+def get_agent_by_wallet(db: sqlite3.Connection, wallet_address: str, chain_id: int | None = None) -> dict[str, Any] | None:
+    query = "SELECT * FROM agents WHERE lower(owner_wallet) = lower(?)"
+    params: tuple[Any, ...] = (wallet_address,)
+    if chain_id is not None:
+        query += " AND chain_id = ?"
+        params = (wallet_address, chain_id)
+    query += " ORDER BY created_at DESC, id DESC LIMIT 1"
+    row = db.execute(query, params).fetchone()
+    return dict(row) if row else None
+
+
+def connect_wallet(db: sqlite3.Connection, payload: WalletConnect) -> dict[str, Any]:
+    existing = get_agent_by_wallet(db, payload.wallet_address, payload.chain_id)
+    if existing:
+        add_audit_log(db, existing["id"], "wallet.connected", {"wallet_address": payload.wallet_address})
+        db.commit()
+        return existing
+
+    short_wallet = f"{payload.wallet_address[:6]}...{payload.wallet_address[-4:]}"
+    return create_agent(
+        db,
+        AgentCreate(
+            name=payload.agent_name or f"Agent {short_wallet}",
+            description="AI agent passport created from a connected wallet.",
+            agent_type=payload.agent_type,
+            owner_wallet=payload.wallet_address,
+            chain_id=payload.chain_id,
+        ),
+    )
 
 
 def count_agents(db: sqlite3.Connection) -> int:
@@ -346,6 +378,74 @@ def build_marketplace_info(db: sqlite3.Connection, agent_id: int) -> dict[str, A
             "disputed_rentals": disputed,
             "completion_rate": completion_rate,
         },
+    }
+
+
+def build_passport(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | None:
+    agent = get_agent_or_none(db, agent_id)
+    if not agent:
+        return None
+
+    reputation = build_reputation(db, agent_id)
+    events = list_events(db, agent_id)
+    complaints = list_complaints(db, agent_id)
+    marketplace = build_marketplace_info(db, agent_id)
+    return {
+        "agent": agent,
+        "reputation": reputation,
+        "marketplace": marketplace,
+        "analysis": build_passport_analysis(reputation, events, complaints, marketplace),
+        "actions_history": events,
+        "complaints": complaints,
+        "audit_log": list_audit_log(db, agent_id),
+    }
+
+
+def build_passport_analysis(
+    reputation: dict[str, Any],
+    events: list[dict[str, Any]],
+    complaints: list[dict[str, Any]],
+    marketplace: dict[str, Any],
+) -> dict[str, Any]:
+    trust_score = reputation["trust_score"]
+    risk_level = reputation["risk_level"]
+    successful_events = [event for event in events if event["outcome"] == "success"]
+    failed_events = [event for event in events if event["outcome"] in {"failed", "error"}]
+    active_complaints = [item for item in complaints if item["status"] != "dismissed"]
+
+    strengths: list[str] = []
+    risk_flags: list[str] = []
+
+    if successful_events:
+        strengths.append(f"{len(successful_events)} successful action(s) recorded")
+    if reputation["successful_volume_usd"] > 0:
+        strengths.append(f"${reputation['successful_volume_usd']} successfully handled")
+    if marketplace["stats"]["completed_rentals"] > 0:
+        strengths.append(f"{marketplace['stats']['completed_rentals']} completed marketplace rental(s)")
+    if not strengths:
+        strengths.append("New passport with no negative history yet")
+
+    if failed_events:
+        risk_flags.append(f"{len(failed_events)} failed/error action(s)")
+    if active_complaints:
+        risk_flags.append(f"{len(active_complaints)} active complaint(s)")
+    if risk_level == "High":
+        risk_flags.append("High risk score: keep wallet permissions very limited")
+    if not risk_flags:
+        risk_flags.append("No active risk flags")
+
+    if risk_level == "Low":
+        recommendation = "Suitable for broader wallet permissions within the recommended limit."
+    elif risk_level == "Medium":
+        recommendation = "Use with capped wallet permissions and monitor new actions."
+    else:
+        recommendation = "Use only for low-value tasks or review manually before granting wallet access."
+
+    return {
+        "summary": f"Trust Score {trust_score}/100, Risk Level {risk_level}.",
+        "strengths": strengths,
+        "risk_flags": risk_flags,
+        "recommendation": recommendation,
     }
 
 

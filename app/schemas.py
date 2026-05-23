@@ -21,6 +21,13 @@ class AgentCreate(BaseModel):
     status: AgentStatus = "active"
 
 
+class WalletConnect(BaseModel):
+    wallet_address: str = Field(min_length=6, max_length=120)
+    chain_id: int = 5000
+    agent_name: str | None = Field(default=None, min_length=2, max_length=120)
+    agent_type: str = Field(default="wallet-linked-agent", min_length=2, max_length=80)
+
+
 class Agent(BaseModel):
     id: int
     name: str
@@ -121,6 +128,13 @@ class MarketplaceCard(BaseModel):
     marketplace: MarketplaceInfo
 
 
+class PassportAnalysis(BaseModel):
+    summary: str
+    strengths: list[str]
+    risk_flags: list[str]
+    recommendation: str
+
+
 class RentalCreate(BaseModel):
     renter_wallet: str = Field(min_length=6, max_length=120)
     task_title: str = Field(min_length=2, max_length=160)
@@ -151,6 +165,7 @@ class AgentPassport(BaseModel):
     agent: Agent
     reputation: Reputation
     marketplace: MarketplaceInfo
+    analysis: PassportAnalysis
     actions_history: list[AgentEvent]
     complaints: list[Complaint]
     audit_log: list[dict[str, Any]]
