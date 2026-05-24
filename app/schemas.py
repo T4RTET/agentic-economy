@@ -30,6 +30,28 @@ class WalletConnect(BaseModel):
     agent_type: str = Field(default="wallet-linked-agent", min_length=2, max_length=80)
 
 
+class WalletNonceRequest(BaseModel):
+    wallet_address: str = Field(min_length=6, max_length=120)
+    chain_id: int = 5000
+
+
+class WalletNonceResponse(BaseModel):
+    wallet_address: str
+    chain_id: int
+    nonce: str
+    message: str
+    expires_at: str
+
+
+class WalletVerifyRequest(BaseModel):
+    wallet_address: str = Field(min_length=6, max_length=120)
+    chain_id: int = 5000
+    message: str = Field(min_length=1)
+    signature: str = Field(min_length=1)
+    agent_name: str | None = Field(default=None, min_length=2, max_length=120)
+    agent_type: str = Field(default="wallet-linked-agent", min_length=2, max_length=80)
+
+
 class Agent(BaseModel):
     id: int
     name: str
@@ -171,6 +193,13 @@ class AgentPassport(BaseModel):
     actions_history: list[AgentEvent]
     complaints: list[Complaint]
     audit_log: list[dict[str, Any]]
+
+
+class WalletVerifyResponse(BaseModel):
+    verified: bool
+    wallet_address: str
+    chain_id: int
+    passport: AgentPassport
 
 
 class WalletPermissionReport(BaseModel):
