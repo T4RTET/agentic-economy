@@ -24,7 +24,7 @@ def seed_demo_data(reset: bool = False, connection: sqlite3.Connection | None = 
                 owner_wallet="0x7a4A00000000000000000000000000000000A11a",
             ),
         )
-        create_event(db, low_risk["id"], AgentEventCreate(title="Rebalanced mETH position", category="defi", outcome="success", value_usd=4200, tx_hash="0xmantle-low-001"))
+        create_event(db, low_risk["id"], AgentEventCreate(title="Rebalanced mETH position", category="defi", outcome="success", value_usd=5000, tx_hash="0xmantle-low-001"))
         create_event(db, low_risk["id"], AgentEventCreate(title="Audited pool risk before deposit", category="risk-check", outcome="success", value_usd=0))
         create_event(db, low_risk["id"], AgentEventCreate(title="Claimed incentives", category="rewards", outcome="success", value_usd=380, tx_hash="0xmantle-low-002"))
         create_or_update_listing(
@@ -47,7 +47,7 @@ def seed_demo_data(reset: bool = False, connection: sqlite3.Connection | None = 
                 owner_wallet="0x8b5B00000000000000000000000000000000B22b",
             ),
         )
-        create_event(db, medium_risk["id"], AgentEventCreate(title="Executed stablecoin route", category="swap", outcome="success", value_usd=900, tx_hash="0xmantle-med-001"))
+        create_event(db, medium_risk["id"], AgentEventCreate(title="Executed stablecoin route", category="swap", outcome="success", value_usd=10000, tx_hash="0xmantle-med-001"))
         create_event(db, medium_risk["id"], AgentEventCreate(title="Missed slippage threshold", category="swap", outcome="failed", value_usd=250))
         create_complaint(db, medium_risk["id"], ComplaintCreate(reason="Returned a delayed execution report after a failed route.", severity="low", status="open"))
         create_or_update_listing(
