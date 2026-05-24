@@ -171,6 +171,7 @@ def update_complaint(db: sqlite3.Connection, complaint_id: int, payload: Complai
 
 def reset_demo_data(db: sqlite3.Connection) -> None:
     db.execute("DELETE FROM audit_log")
+    db.execute("DELETE FROM wallet_auth_nonces")
     db.execute("DELETE FROM rentals")
     db.execute("DELETE FROM marketplace_listings")
     db.execute("DELETE FROM complaints")
@@ -179,7 +180,7 @@ def reset_demo_data(db: sqlite3.Connection) -> None:
     db.execute(
         """
         DELETE FROM sqlite_sequence
-        WHERE name IN ('audit_log', 'rentals', 'marketplace_listings', 'complaints', 'agent_events', 'agents')
+        WHERE name IN ('audit_log', 'wallet_auth_nonces', 'rentals', 'marketplace_listings', 'complaints', 'agent_events', 'agents')
         """
     )
     db.commit()
