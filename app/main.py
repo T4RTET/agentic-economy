@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
 from app.routers.agents import router as agents_router
 from app.routers.demo import router as demo_router
+from app.routers.intelligence import router as intelligence_router
 from app.routers.marketplace import router as marketplace_router
 from app.routers.wallet import router as wallet_router
 
@@ -41,3 +42,4 @@ app.include_router(agents_router)
 app.include_router(wallet_router)
 app.include_router(demo_router)
 app.include_router(marketplace_router)
+app.include_router(intelligence_router)
