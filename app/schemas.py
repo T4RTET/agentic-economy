@@ -10,6 +10,8 @@ ComplaintStatus = Literal["open", "confirmed", "dismissed"]
 PricingModel = Literal["buy", "rent_hourly", "rent_daily", "per_task"]
 ListingAvailability = Literal["available", "rented", "paused"]
 RentalStatus = Literal["pending", "active", "completed", "disputed", "cancelled"]
+WalletPermissionDecision = Literal["allow", "limit", "deny"]
+RiskAssessmentConfidence = Literal["low", "medium", "high"]
 
 
 class AgentCreate(BaseModel):
@@ -169,6 +171,32 @@ class AgentPassport(BaseModel):
     actions_history: list[AgentEvent]
     complaints: list[Complaint]
     audit_log: list[dict[str, Any]]
+
+
+class WalletPermissionReport(BaseModel):
+    decision: WalletPermissionDecision
+    recommended_limit_usd: int
+    reason: str
+
+
+class RiskAssessmentReport(BaseModel):
+    risk_level: Literal["Low", "Medium", "High"]
+    main_risks: list[str]
+    confidence: RiskAssessmentConfidence
+
+
+class MarketplaceVerdictReport(BaseModel):
+    can_be_listed: bool
+    can_be_rented: bool
+    reason: str
+
+
+class AgentIntelligenceReport(BaseModel):
+    summary: str
+    wallet_permission: WalletPermissionReport
+    risk_assessment: RiskAssessmentReport
+    marketplace_verdict: MarketplaceVerdictReport
+    suggested_next_actions: list[str]
 
 
 class DemoResetResponse(BaseModel):
