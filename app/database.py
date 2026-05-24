@@ -92,6 +92,17 @@ def init_db(connection: sqlite3.Connection | None = None) -> None:
                 FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS wallet_auth_nonces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wallet_address TEXT NOT NULL,
+                chain_id INTEGER NOT NULL DEFAULT 5000,
+                nonce TEXT NOT NULL,
+                message TEXT NOT NULL,
+                used INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                expires_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 agent_id INTEGER,
