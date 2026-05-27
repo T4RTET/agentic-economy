@@ -84,34 +84,6 @@ class AgentEvent(BaseModel):
     created_at: str
 
 
-class TransactionPrepareRequest(BaseModel):
-    recipient_address: str = Field(min_length=6, max_length=120)
-    value_usd: float = Field(ge=0)
-    value_wei: str = Field(min_length=1, max_length=120)
-    chain_id: int = 5000
-    reason: str = Field(default="Prepared by Agent Reputation Passport.", min_length=1, max_length=500)
-
-
-class TransactionPrepareResponse(BaseModel):
-    from_address: str = Field(alias="from")
-    to: str
-    value: str
-    chain_id: int
-    reason: str
-    requires_user_signature: bool
-
-
-class TransactionRecordRequest(BaseModel):
-    tx_hash: str = Field(min_length=6, max_length=120)
-    outcome: EventOutcome
-    value_usd: float = Field(default=0, ge=0)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class TransactionRecordResponse(BaseModel):
-    event: AgentEvent
-
-
 class ComplaintCreate(BaseModel):
     reason: str = Field(min_length=4, max_length=1000)
     severity: ComplaintSeverity
