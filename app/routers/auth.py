@@ -37,7 +37,8 @@ def post_wallet_verify(payload: WalletVerifyRequest, db: sqlite3.Connection = De
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Passport not found")
     return {
         "verified": True,
-        "wallet_address": payload.wallet_address,
+        "agent_id": agent["id"],
+        "wallet_address": agent["owner_wallet"],
         "chain_id": payload.chain_id,
         "passport": passport,
     }

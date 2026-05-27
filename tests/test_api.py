@@ -6,6 +6,10 @@ from app.database import connect, get_db, init_db
 from app.main import app
 
 
+OWNER_WALLET = "0x1234567890abcdef1234567890abcdef12345678"
+RENTER_WALLET = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+
+
 def test_agent_passport_flow() -> None:
     db = connect(":memory:")
     init_db(db)
@@ -22,7 +26,7 @@ def test_agent_passport_flow() -> None:
                 "name": "Demo Agent",
                 "description": "Test agent",
                 "agent_type": "wallet-agent",
-                "owner_wallet": "0x1234567890abcdef",
+                "owner_wallet": OWNER_WALLET,
                 "chain_id": 5000,
             },
         )
@@ -32,7 +36,7 @@ def test_agent_passport_flow() -> None:
         wallet_connect_response = client.post(
             "/wallet/connect",
             json={
-                "wallet_address": "0x1234567890abcdef",
+                "wallet_address": OWNER_WALLET,
                 "chain_id": 5000,
                 "agent_name": "Wallet Passport Agent",
             },
@@ -42,7 +46,7 @@ def test_agent_passport_flow() -> None:
         assert wallet_passport["agent"]["id"] == agent_id
         assert wallet_passport["analysis"]["summary"].startswith("Trust Score")
 
-        wallet_get_response = client.get("/wallet/0x1234567890abcdef/passport")
+        wallet_get_response = client.get(f"/wallet/{OWNER_WALLET}/passport")
         assert wallet_get_response.status_code == 200
         assert wallet_get_response.json()["agent"]["id"] == agent_id
 
@@ -94,7 +98,6 @@ def test_agent_passport_flow() -> None:
         assert seeded_agents_response.status_code == 200
         assert len(seeded_agents_response.json()) == 3
 
-
         marketplace_response = client.get("/marketplace/listings")
         assert marketplace_response.status_code == 200
         listings = marketplace_response.json()
@@ -109,7 +112,7 @@ def test_agent_passport_flow() -> None:
         rental_response = client.post(
             f"/marketplace/listings/{listing_id}/rent",
             json={
-                "renter_wallet": "0xabcdef1234567890",
+                "renter_wallet": RENTER_WALLET,
                 "task_title": "Demo marketplace task",
                 "task_description": "Find a low-risk route",
                 "duration_hours": 3,
@@ -140,7 +143,7 @@ def test_agent_passport_flow() -> None:
         disputed_rental_response = client.post(
             f"/marketplace/listings/{second_listing_id}/rent",
             json={
-                "renter_wallet": "0xabcdef1234567890",
+                "renter_wallet": RENTER_WALLET,
                 "task_title": "Disputed marketplace task",
                 "duration_hours": 1,
             },

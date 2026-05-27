@@ -9,6 +9,7 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 
 from app.schemas import WalletNonceRequest, WalletVerifyRequest
+from app.services.wallet_utils import normalize_wallet_address, wallet_addresses_equal
 
 
 APP_NAME = "Agent Reputation Passport"
@@ -23,11 +24,12 @@ class WalletAuthError(Exception):
 
 
 def create_wallet_nonce(db: sqlite3.Connection, payload: WalletNonceRequest) -> dict[str, Any]:
+    wallet_address = normalize_wallet_address(payload.wallet_address)
     issued_at = _now()
     expires_at = issued_at + timedelta(minutes=NONCE_TTL_MINUTES)
     nonce = secrets.token_urlsafe(24)
     message = build_sign_in_message(
-        wallet_address=payload.wallet_address,
+        wallet_address=wallet_address,
         chain_id=payload.chain_id,
         nonce=nonce,
         issued_at=issued_at,
@@ -39,11 +41,11 @@ def create_wallet_nonce(db: sqlite3.Connection, payload: WalletNonceRequest) -> 
         INSERT INTO wallet_auth_nonces (wallet_address, chain_id, nonce, message, expires_at)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (payload.wallet_address, payload.chain_id, nonce, message, _format_datetime(expires_at)),
+        (wallet_address, payload.chain_id, nonce, message, _format_datetime(expires_at)),
     )
     db.commit()
     return {
-        "wallet_address": payload.wallet_address,
+        "wallet_address": wallet_address,
         "chain_id": payload.chain_id,
         "nonce": nonce,
         "message": message,
@@ -70,7 +72,8 @@ def build_sign_in_message(
 
 
 def verify_wallet_signature(db: sqlite3.Connection, payload: WalletVerifyRequest) -> None:
-    nonce_record = _find_nonce_record(db, payload.wallet_address, payload.chain_id, payload.message)
+    wallet_address = normalize_wallet_address(payload.wallet_address)
+    nonce_record = _find_nonce_record(db, wallet_address, payload.chain_id, payload.message)
     if not nonce_record:
         raise WalletAuthError("Nonce not found for this wallet and message.", 400)
     if int(nonce_record["used"]):
@@ -79,7 +82,7 @@ def verify_wallet_signature(db: sqlite3.Connection, payload: WalletVerifyRequest
         raise WalletAuthError("Nonce has expired.", 400)
 
     recovered_address = _recover_address(payload.message, payload.signature)
-    if recovered_address.lower() != payload.wallet_address.lower():
+    if not wallet_addresses_equal(recovered_address, wallet_address):
         raise WalletAuthError("Signature does not match the requested wallet address.", 401)
 
     db.execute("UPDATE wallet_auth_nonces SET used = 1 WHERE id = ?", (nonce_record["id"],))

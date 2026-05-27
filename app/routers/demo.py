@@ -2,10 +2,10 @@ import sqlite3
 
 from fastapi import APIRouter, Depends
 
-from app.database import get_db
 from app import repositories
-from app.seed import seed_demo_data
+from app.database import get_db
 from app.schemas import DemoResetResponse
+from app.seed import seed_demo_data
 
 
 router = APIRouter(prefix="/demo", tags=["demo"])

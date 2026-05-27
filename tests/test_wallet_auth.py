@@ -8,6 +8,10 @@ from fastapi.testclient import TestClient
 
 from app.database import connect, get_db, init_db
 from app.main import app
+from app.services.wallet_utils import normalize_wallet_address
+
+
+DEMO_WALLET = "0x1234567890abcdef1234567890abcdef12345678"
 
 
 def _client_with_db() -> tuple[TestClient, sqlite3.Connection]:
@@ -46,7 +50,7 @@ def test_auth_nonce_returns_message_and_nonce() -> None:
     try:
         nonce = _nonce_response(client, account.address)
 
-        assert nonce["wallet_address"] == account.address
+        assert nonce["wallet_address"] == normalize_wallet_address(account.address)
         assert nonce["chain_id"] == 5000
         assert nonce["nonce"]
         assert account.address in nonce["message"]
@@ -68,6 +72,7 @@ def test_valid_signature_verifies_and_returns_passport() -> None:
         assert response.status_code == 200
         body = response.json()
         assert body["verified"] is True
+        assert body["agent_id"] == body["passport"]["agent"]["id"]
         assert body["wallet_address"] == account.address
         assert body["passport"]["agent"]["owner_wallet"] == account.address
         assert body["passport"]["agent"]["name"] == "Verified Wallet Agent"
@@ -142,14 +147,14 @@ def test_existing_wallet_connect_still_works() -> None:
         response = client.post(
             "/wallet/connect",
             json={
-                "wallet_address": "0x1234567890abcdef",
+                "wallet_address": DEMO_WALLET,
                 "chain_id": 5000,
                 "agent_name": "Demo Wallet Agent",
             },
         )
 
         assert response.status_code == 200
-        assert response.json()["agent"]["owner_wallet"] == "0x1234567890abcdef"
+        assert response.json()["agent"]["owner_wallet"] == normalize_wallet_address(DEMO_WALLET)
     finally:
         app.dependency_overrides.clear()
         db.close()
@@ -167,6 +172,27 @@ def test_intelligence_endpoint_works_after_verified_wallet_connection() -> None:
 
         assert response.status_code == 200
         assert response.json()["wallet_permission"]["decision"] in {"allow", "limit", "deny"}
+    finally:
+        app.dependency_overrides.clear()
+        db.close()
+
+
+def test_verify_response_normalizes_wallet_address() -> None:
+    client, db = _client_with_db()
+    account = Account.create()
+    lowercase_wallet = account.address.lower()
+    try:
+        nonce = _nonce_response(client, lowercase_wallet)
+
+        response = client.post(
+            "/auth/verify",
+            json=_signed_verification_payload(account, nonce["message"], wallet_address=lowercase_wallet),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["wallet_address"] == account.address
+        assert body["passport"]["agent"]["owner_wallet"] == account.address
     finally:
         app.dependency_overrides.clear()
         db.close()

@@ -9,15 +9,23 @@ from app.reputation import ReputationComplaint, ReputationEvent, calculate_reput
 from app.schemas import (
     AgentCreate,
     AgentEventCreate,
+    AutomationActionRequest,
+    AutomationPolicyUpdate,
     ComplaintCreate,
     ComplaintUpdate,
     MarketplaceListingCreate,
     RentalCreate,
     WalletConnect,
 )
+from app.services.wallet_utils import normalize_wallet_address
 
 
 def create_agent(db: sqlite3.Connection, payload: AgentCreate) -> dict[str, Any]:
+    owner_wallet = normalize_wallet_address(payload.owner_wallet)
+    existing = get_agent_by_wallet(db, owner_wallet, payload.chain_id)
+    if existing:
+        return existing
+
     cursor = db.execute(
         """
         INSERT INTO agents (name, description, agent_type, owner_wallet, chain_id, status)
@@ -27,7 +35,7 @@ def create_agent(db: sqlite3.Connection, payload: AgentCreate) -> dict[str, Any]
             payload.name,
             payload.description,
             payload.agent_type,
-            payload.owner_wallet,
+            owner_wallet,
             payload.chain_id,
             payload.status,
         ),
@@ -48,31 +56,33 @@ def get_agent_or_none(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] |
 
 
 def get_agent_by_wallet(db: sqlite3.Connection, wallet_address: str, chain_id: int | None = None) -> dict[str, Any] | None:
+    normalized_wallet = normalize_wallet_address(wallet_address)
     query = "SELECT * FROM agents WHERE lower(owner_wallet) = lower(?)"
-    params: tuple[Any, ...] = (wallet_address,)
+    params: tuple[Any, ...] = (normalized_wallet,)
     if chain_id is not None:
         query += " AND chain_id = ?"
-        params = (wallet_address, chain_id)
+        params = (normalized_wallet, chain_id)
     query += " ORDER BY created_at DESC, id DESC LIMIT 1"
     row = db.execute(query, params).fetchone()
     return dict(row) if row else None
 
 
 def connect_wallet(db: sqlite3.Connection, payload: WalletConnect) -> dict[str, Any]:
-    existing = get_agent_by_wallet(db, payload.wallet_address, payload.chain_id)
+    wallet_address = normalize_wallet_address(payload.wallet_address)
+    existing = get_agent_by_wallet(db, wallet_address, payload.chain_id)
     if existing:
-        add_audit_log(db, existing["id"], "wallet.connected", {"wallet_address": payload.wallet_address})
+        add_audit_log(db, existing["id"], "wallet.connected", {"wallet_address": wallet_address})
         db.commit()
         return existing
 
-    short_wallet = f"{payload.wallet_address[:6]}...{payload.wallet_address[-4:]}"
+    short_wallet = f"{wallet_address[:6]}...{wallet_address[-4:]}"
     return create_agent(
         db,
         AgentCreate(
             name=payload.agent_name or f"Agent {short_wallet}",
             description="AI agent passport created from a connected wallet.",
             agent_type=payload.agent_type,
-            owner_wallet=payload.wallet_address,
+            owner_wallet=wallet_address,
             chain_id=payload.chain_id,
         ),
     )
@@ -171,6 +181,9 @@ def update_complaint(db: sqlite3.Connection, complaint_id: int, payload: Complai
 
 def reset_demo_data(db: sqlite3.Connection) -> None:
     db.execute("DELETE FROM audit_log")
+    db.execute("DELETE FROM agent_automation_attempts")
+    db.execute("DELETE FROM agent_automation_policies")
+    db.execute("DELETE FROM agent_tasks")
     db.execute("DELETE FROM wallet_auth_nonces")
     db.execute("DELETE FROM rentals")
     db.execute("DELETE FROM marketplace_listings")
@@ -180,7 +193,7 @@ def reset_demo_data(db: sqlite3.Connection) -> None:
     db.execute(
         """
         DELETE FROM sqlite_sequence
-        WHERE name IN ('audit_log', 'wallet_auth_nonces', 'rentals', 'marketplace_listings', 'complaints', 'agent_events', 'agents')
+        WHERE name IN ('audit_log', 'agent_automation_attempts', 'agent_automation_policies', 'agent_tasks', 'wallet_auth_nonces', 'rentals', 'marketplace_listings', 'complaints', 'agent_events', 'agents')
         """
     )
     db.commit()
@@ -270,6 +283,7 @@ def create_rental(db: sqlite3.Connection, listing_id: int, payload: RentalCreate
         return None
 
     agreed_price = _calculate_rental_price(listing, payload.duration_hours)
+    renter_wallet = normalize_wallet_address(payload.renter_wallet)
     cursor = db.execute(
         """
         INSERT INTO rentals
@@ -279,7 +293,7 @@ def create_rental(db: sqlite3.Connection, listing_id: int, payload: RentalCreate
         (
             listing_id,
             listing["agent_id"],
-            payload.renter_wallet,
+            renter_wallet,
             payload.task_title,
             payload.task_description,
             payload.duration_hours,
@@ -298,6 +312,248 @@ def create_rental(db: sqlite3.Connection, listing_id: int, payload: RentalCreate
     )
     db.commit()
     return get_rental(db, cursor.lastrowid)
+
+
+def create_agent_task(
+    db: sqlite3.Connection,
+    agent_id: int,
+    user_goal: str,
+    status: str,
+    mode: str,
+    plan: dict[str, Any],
+) -> dict[str, Any]:
+    cursor = db.execute(
+        """
+        INSERT INTO agent_tasks (agent_id, user_goal, status, mode, plan_json)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (agent_id, user_goal, status, mode, json.dumps(plan)),
+    )
+    add_audit_log(db, agent_id, "task.planned", {"task_id": cursor.lastrowid, "status": status, "mode": mode})
+    db.commit()
+    return get_agent_task(db, cursor.lastrowid)
+
+
+def get_agent_task(db: sqlite3.Connection, task_id: int) -> dict[str, Any] | None:
+    row = db.execute("SELECT * FROM agent_tasks WHERE id = ?", (task_id,)).fetchone()
+    return _task_from_row(row) if row else None
+
+
+def update_agent_task(
+    db: sqlite3.Connection,
+    task_id: int,
+    status: str,
+    plan: dict[str, Any],
+) -> dict[str, Any] | None:
+    existing = get_agent_task(db, task_id)
+    if not existing:
+        return None
+    db.execute(
+        """
+        UPDATE agent_tasks
+        SET status = ?, plan_json = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (status, json.dumps(plan), task_id),
+    )
+    add_audit_log(db, existing["agent_id"], "task.updated", {"task_id": task_id, "status": status})
+    db.commit()
+    return get_agent_task(db, task_id)
+
+
+def get_or_create_automation_policy(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | None:
+    if not get_agent_or_none(db, agent_id):
+        return None
+
+    existing = get_automation_policy(db, agent_id)
+    if existing:
+        return existing
+
+    cursor = db.execute(
+        """
+        INSERT INTO agent_automation_policies (agent_id)
+        VALUES (?)
+        """,
+        (agent_id,),
+    )
+    add_audit_log(db, agent_id, "automation_policy.created", {"policy_id": cursor.lastrowid})
+    db.commit()
+    return get_automation_policy(db, agent_id)
+
+
+def get_automation_policy(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | None:
+    row = db.execute("SELECT * FROM agent_automation_policies WHERE agent_id = ?", (agent_id,)).fetchone()
+    return _automation_policy_from_row(row) if row else None
+
+
+def update_automation_policy(
+    db: sqlite3.Connection,
+    agent_id: int,
+    payload: AutomationPolicyUpdate,
+) -> dict[str, Any] | None:
+    if not get_agent_or_none(db, agent_id):
+        return None
+    get_or_create_automation_policy(db, agent_id)
+
+    db.execute(
+        """
+        UPDATE agent_automation_policies
+        SET automation_enabled = ?, mode = ?, max_tx_value_usd = ?, daily_limit_usd = ?,
+            max_transactions_per_hour = ?, min_native_balance_wei = ?,
+            require_confirmation_above_usd = ?, allowed_chain_ids_json = ?,
+            allowed_tokens_json = ?, allowed_recipients_json = ?, allowed_actions_json = ?,
+            emergency_stop = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE agent_id = ?
+        """,
+        (
+            int(payload.automation_enabled),
+            payload.mode,
+            payload.max_tx_value_usd,
+            payload.daily_limit_usd,
+            payload.max_transactions_per_hour,
+            payload.min_native_balance_wei,
+            payload.require_confirmation_above_usd,
+            json.dumps(payload.allowed_chain_ids),
+            json.dumps(payload.allowed_tokens),
+            json.dumps(payload.allowed_recipients),
+            json.dumps(payload.allowed_actions),
+            int(payload.emergency_stop),
+            agent_id,
+        ),
+    )
+    add_audit_log(
+        db,
+        agent_id,
+        "automation_policy.updated",
+        {
+            "automation_enabled": payload.automation_enabled,
+            "mode": payload.mode,
+            "max_tx_value_usd": payload.max_tx_value_usd,
+            "daily_limit_usd": payload.daily_limit_usd,
+        },
+    )
+    db.commit()
+    return get_automation_policy(db, agent_id)
+
+
+def request_automation_delegation(db: sqlite3.Connection, agent_id: int, scope: dict[str, Any]) -> dict[str, Any] | None:
+    if not get_agent_or_none(db, agent_id):
+        return None
+    get_or_create_automation_policy(db, agent_id)
+    db.execute(
+        """
+        UPDATE agent_automation_policies
+        SET delegation_status = 'requested', delegation_scope_json = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE agent_id = ?
+        """,
+        (json.dumps(scope), agent_id),
+    )
+    add_audit_log(db, agent_id, "automation_delegation.requested", scope)
+    db.commit()
+    return get_automation_policy(db, agent_id)
+
+
+def confirm_automation_delegation(
+    db: sqlite3.Connection,
+    agent_id: int,
+    smart_account_address: str,
+    delegation_id: str,
+    delegation_scope: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not get_agent_or_none(db, agent_id):
+        return None
+    smart_account = normalize_wallet_address(smart_account_address)
+    get_or_create_automation_policy(db, agent_id)
+    db.execute(
+        """
+        UPDATE agent_automation_policies
+        SET smart_account_address = ?, delegation_id = ?, delegation_status = 'active',
+            delegation_scope_json = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE agent_id = ?
+        """,
+        (smart_account, delegation_id, json.dumps(delegation_scope), agent_id),
+    )
+    add_audit_log(
+        db,
+        agent_id,
+        "automation_delegation.confirmed",
+        {"smart_account_address": smart_account, "delegation_id": delegation_id},
+    )
+    db.commit()
+    return get_automation_policy(db, agent_id)
+
+
+def create_automation_attempt(
+    db: sqlite3.Connection,
+    agent_id: int,
+    payload: AutomationActionRequest,
+    status: str,
+    reason: str = "",
+    rejection_reason: str | None = None,
+    tx_hash: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cursor = db.execute(
+        """
+        INSERT INTO agent_automation_attempts
+        (agent_id, action_type, to_address, token_address, value_wei, value_usd, chain_id,
+         status, tx_hash, reason, rejection_reason, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            agent_id,
+            payload.action_type,
+            normalize_wallet_address(payload.to_address),
+            normalize_wallet_address(payload.token_address) if payload.token_address else None,
+            payload.value_wei,
+            payload.value_usd,
+            payload.chain_id,
+            status,
+            tx_hash,
+            reason,
+            rejection_reason,
+            json.dumps(metadata or payload.metadata),
+        ),
+    )
+    add_audit_log(
+        db,
+        agent_id,
+        "automation_attempt.created",
+        {"attempt_id": cursor.lastrowid, "status": status, "action_type": payload.action_type},
+    )
+    db.commit()
+    return get_automation_attempt(db, cursor.lastrowid)
+
+
+def get_automation_attempt(db: sqlite3.Connection, attempt_id: int) -> dict[str, Any]:
+    row = db.execute("SELECT * FROM agent_automation_attempts WHERE id = ?", (attempt_id,)).fetchone()
+    return _automation_attempt_from_row(row)
+
+
+def automation_daily_value_usd(db: sqlite3.Connection, agent_id: int) -> float:
+    row = db.execute(
+        """
+        SELECT COALESCE(SUM(value_usd), 0) AS total
+        FROM agent_automation_attempts
+        WHERE agent_id = ? AND status = 'executed' AND date(created_at) = date('now')
+        """,
+        (agent_id,),
+    ).fetchone()
+    return float(row["total"] or 0)
+
+
+def automation_hourly_count(db: sqlite3.Connection, agent_id: int) -> int:
+    row = db.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM agent_automation_attempts
+        WHERE agent_id = ?
+          AND status IN ('prepared', 'requires_confirmation', 'delegation_required', 'executed')
+          AND created_at >= datetime('now', '-1 hour')
+        """,
+        (agent_id,),
+    ).fetchone()
+    return int(row["total"] or 0)
 
 
 def get_rental(db: sqlite3.Connection, rental_id: int) -> dict[str, Any] | None:
@@ -492,6 +748,30 @@ def _audit_from_row(row: sqlite3.Row) -> dict[str, Any]:
 def _listing_from_row(row: sqlite3.Row) -> dict[str, Any]:
     item = dict(row)
     item["capabilities"] = json.loads(item.pop("capabilities_json") or "[]")
+    return item
+
+
+def _task_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    item = dict(row)
+    item["plan"] = json.loads(item.pop("plan_json") or "{}")
+    return item
+
+
+def _automation_policy_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    item = dict(row)
+    item["automation_enabled"] = bool(item["automation_enabled"])
+    item["emergency_stop"] = bool(item["emergency_stop"])
+    item["allowed_chain_ids"] = json.loads(item.pop("allowed_chain_ids_json") or "[]")
+    item["allowed_tokens"] = json.loads(item.pop("allowed_tokens_json") or "[]")
+    item["allowed_recipients"] = json.loads(item.pop("allowed_recipients_json") or "[]")
+    item["allowed_actions"] = json.loads(item.pop("allowed_actions_json") or "[]")
+    item["delegation_scope"] = json.loads(item.pop("delegation_scope_json") or "{}")
+    return item
+
+
+def _automation_attempt_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    item = dict(row)
+    item["metadata"] = json.loads(item.pop("metadata_json") or "{}")
     return item
 
 

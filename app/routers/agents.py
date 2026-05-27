@@ -2,8 +2,8 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.database import get_db
 from app import repositories
+from app.database import get_db
 from app.schemas import (
     Agent,
     AgentCreate,
