@@ -15,6 +15,8 @@ class ReputationEvent:
     outcome: str
     value_usd: float = 0
     created_at: str | None = None
+    category: str | None = None
+    tx_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,7 @@ def calculate_reputation(
     events: list[ReputationEvent],
     complaints: list[ReputationComplaint],
     agent_created_at: str | None = None,
+    wallet_verified: bool = False,
 ) -> ReputationResult:
     successful_events = [event for event in events if event.outcome == SUCCESS_OUTCOME]
     failed_events = [event for event in events if event.outcome in FAILED_OUTCOMES]
@@ -45,13 +48,27 @@ def calculate_reputation(
     active_complaints = [item for item in complaints if item.status != "dismissed"]
 
     creation_score = _creation_history_score(agent_created_at)
+    identity_score = _identity_verification_score(wallet_verified)
     count_score = _transaction_count_score(len(events))
     quality_score = _transaction_quality_score(events)
     frequency_score = _transaction_frequency_score(events)
+    onchain_score = _onchain_evidence_score(events)
+    diversity_score = _category_diversity_score(events)
+    volume_score = _volume_experience_score(successful_volume)
     complaint_penalty = sum(_complaint_penalty(complaint.severity, complaint.status) for complaint in complaints)
     complaint_health_score = 10 - complaint_penalty
 
-    score = creation_score + count_score + quality_score + frequency_score + complaint_health_score
+    score = (
+        creation_score
+        + identity_score
+        + count_score
+        + quality_score
+        + frequency_score
+        + onchain_score
+        + diversity_score
+        + volume_score
+        + complaint_health_score
+    )
     trust_score = int(round(max(0, min(100, score))))
     risk_level = _risk_level(trust_score)
 
@@ -65,23 +82,43 @@ def calculate_reputation(
         score_breakdown={
             "creation_history": {
                 "score": round(creation_score, 2),
-                "max": 15,
+                "max": 10,
                 "description": "Older wallet-linked agents get more trust than freshly created ones.",
+            },
+            "wallet_verification": {
+                "score": round(identity_score, 2),
+                "max": 10,
+                "description": "Wallet ownership verified by signed message increases confidence.",
             },
             "transaction_count": {
                 "score": round(count_score, 2),
-                "max": 20,
+                "max": 15,
                 "description": "More recorded transactions/actions give more evidence.",
             },
             "transaction_quality": {
                 "score": round(quality_score, 2),
-                "max": 40,
+                "max": 30,
                 "description": "Success rate and handled value increase trust; failed/error outcomes reduce it.",
             },
             "transaction_frequency": {
                 "score": round(frequency_score, 2),
-                "max": 15,
+                "max": 10,
                 "description": "Recent consistent activity is better than an inactive passport.",
+            },
+            "onchain_evidence": {
+                "score": round(onchain_score, 2),
+                "max": 10,
+                "description": "Actions with transaction hashes are easier to verify.",
+            },
+            "task_diversity": {
+                "score": round(diversity_score, 2),
+                "max": 5,
+                "description": "Successful activity across multiple task categories reduces single-use uncertainty.",
+            },
+            "value_experience": {
+                "score": round(volume_score, 2),
+                "max": 10,
+                "description": "Higher successfully handled value adds confidence with a capped impact.",
             },
             "complaint_health": {
                 "score": round(complaint_health_score, 2),
@@ -96,18 +133,22 @@ def calculate_reputation(
 def _creation_history_score(agent_created_at: str | None) -> float:
     age_days = _age_days(agent_created_at)
     if age_days >= 90:
-        return 15
+        return 10
     if age_days >= 30:
-        return 12
-    if age_days >= 7:
         return 8
+    if age_days >= 7:
+        return 6
     if age_days >= 1:
-        return 5
-    return 8
+        return 4
+    return 5
+
+
+def _identity_verification_score(wallet_verified: bool) -> float:
+    return 10 if wallet_verified else 0
 
 
 def _transaction_count_score(total_events: int) -> float:
-    return min(total_events * 3, 20)
+    return min(total_events * 3, 15)
 
 
 def _transaction_quality_score(events: list[ReputationEvent]) -> float:
@@ -118,9 +159,9 @@ def _transaction_quality_score(events: list[ReputationEvent]) -> float:
     failed_count = len([event for event in events if event.outcome in FAILED_OUTCOMES])
     success_rate = success_count / len(events)
     successful_volume = sum(max(float(event.value_usd or 0), 0) for event in events if event.outcome == SUCCESS_OUTCOME)
-    volume_signal = min(math.log10(successful_volume + 1) * 3, 10)
+    volume_signal = min(math.log10(successful_volume + 1) * 2, 6)
     failure_penalty = min(failed_count * 4, 12)
-    return max(0, min(40, success_rate * 32 + volume_signal - failure_penalty))
+    return max(0, min(30, success_rate * 28 + volume_signal - failure_penalty))
 
 
 def _transaction_frequency_score(events: list[ReputationEvent]) -> float:
@@ -133,7 +174,29 @@ def _transaction_frequency_score(events: list[ReputationEvent]) -> float:
         event_time = _parse_datetime(event.created_at)
         if event_time is None or (now - event_time).days <= 30:
             recent_count += 1
-    return min(recent_count * 4, 15)
+    return min(recent_count * 3, 10)
+
+
+def _onchain_evidence_score(events: list[ReputationEvent]) -> float:
+    if not events:
+        return 0
+    tx_backed_events = len([event for event in events if event.tx_hash])
+    return min((tx_backed_events / len(events)) * 10, 10)
+
+
+def _category_diversity_score(events: list[ReputationEvent]) -> float:
+    successful_categories = {
+        event.category
+        for event in events
+        if event.outcome == SUCCESS_OUTCOME and event.category
+    }
+    return min(len(successful_categories) * 2, 5)
+
+
+def _volume_experience_score(successful_volume_usd: float) -> float:
+    if successful_volume_usd <= 0:
+        return 0
+    return min(math.log10(successful_volume_usd + 1) * 2.5, 10)
 
 
 def _complaint_penalty(severity: str, status: str) -> float:

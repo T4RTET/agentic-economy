@@ -325,19 +325,27 @@ Trust Score is calculated on a `0..100` scale from transparent criteria:
 
 ```text
 Trust Score =
-  creation_history       up to 15
-+ transaction_count      up to 20
-+ transaction_quality    up to 40
-+ transaction_frequency  up to 15
+  creation_history       up to 10
++ wallet_verification    up to 10
++ transaction_count      up to 15
++ transaction_quality    up to 30
++ transaction_frequency  up to 10
++ onchain_evidence       up to 10
++ task_diversity         up to 5
++ value_experience       up to 10
 + complaint_health       up to 10, can go negative if complaints are serious
 ```
 
 Criteria:
 
 - `creation_history`: older wallet-linked agents receive more trust than freshly created agents.
+- `wallet_verification`: MetaMask signed-message verification proves wallet ownership.
 - `transaction_count`: more recorded actions give more evidence.
 - `transaction_quality`: successful outcomes and handled value increase trust; failed/error outcomes reduce quality.
 - `transaction_frequency`: recent consistent activity is better than inactivity.
+- `onchain_evidence`: actions with transaction hashes are easier to verify.
+- `task_diversity`: successful activity across multiple categories reduces single-use uncertainty.
+- `value_experience`: successfully handled value adds confidence, but the impact is capped.
 - `complaint_health`: clean complaint history adds trust; open/confirmed complaints reduce it by weighted severity.
 
 The API returns a machine-readable breakdown:
@@ -352,24 +360,44 @@ The API returns a machine-readable breakdown:
   "complaint_count": 0,
   "score_breakdown": {
     "creation_history": {
-      "score": 3,
-      "max": 15,
+      "score": 5,
+      "max": 10,
       "description": "Older wallet-linked agents get more trust than freshly created ones."
     },
+    "wallet_verification": {
+      "score": 10,
+      "max": 10,
+      "description": "Wallet ownership verified by signed message increases confidence."
+    },
     "transaction_count": {
-      "score": 7.5,
-      "max": 20,
+      "score": 9,
+      "max": 15,
       "description": "More recorded transactions/actions give more evidence."
     },
     "transaction_quality": {
-      "score": 40,
-      "max": 40,
+      "score": 30,
+      "max": 30,
       "description": "Success rate and handled value increase trust; failed/error outcomes reduce it."
     },
     "transaction_frequency": {
       "score": 9,
-      "max": 15,
+      "max": 10,
       "description": "Recent consistent activity is better than an inactive passport."
+    },
+    "onchain_evidence": {
+      "score": 6.67,
+      "max": 10,
+      "description": "Actions with transaction hashes are easier to verify."
+    },
+    "task_diversity": {
+      "score": 5,
+      "max": 5,
+      "description": "Successful activity across multiple task categories reduces single-use uncertainty."
+    },
+    "value_experience": {
+      "score": 9.33,
+      "max": 10,
+      "description": "Higher successfully handled value adds confidence with a capped impact."
     },
     "complaint_health": {
       "score": 10,
