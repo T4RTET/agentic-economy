@@ -5,7 +5,7 @@ FastAPI + SQLite backend for the Agent Reputation Passport MVP.
 ## What it does
 
 - Stores AI agents, completed actions, complaints, and audit entries.
-- Calculates Trust Score, Risk Level, and recommended wallet limit.
+- Calculates Trust Score, Risk Level, score breakdown, and recommended wallet limit.
 - Verifies MetaMask wallet ownership with signed messages.
 - Keeps the legacy wallet connect endpoint available for demo flows.
 - Exposes a frontend-friendly API for a Vite React demo flow.

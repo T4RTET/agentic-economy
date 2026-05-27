@@ -319,6 +319,117 @@ Returns wallet permission, risk assessment, marketplace verdict, and suggested n
 }
 ```
 
+## Trust Score Formula
+
+Trust Score is calculated on a `0..100` scale from transparent criteria:
+
+```text
+Trust Score =
+  creation_history       up to 15
++ transaction_count      up to 20
++ transaction_quality    up to 40
++ transaction_frequency  up to 15
++ complaint_health       up to 10, can go negative if complaints are serious
+```
+
+Criteria:
+
+- `creation_history`: older wallet-linked agents receive more trust than freshly created agents.
+- `transaction_count`: more recorded actions give more evidence.
+- `transaction_quality`: successful outcomes and handled value increase trust; failed/error outcomes reduce quality.
+- `transaction_frequency`: recent consistent activity is better than inactivity.
+- `complaint_health`: clean complaint history adds trust; open/confirmed complaints reduce it by weighted severity.
+
+The API returns a machine-readable breakdown:
+
+```json
+{
+  "trust_score": 82,
+  "risk_level": "Low",
+  "recommended_wallet_limit_usd": 5460,
+  "successful_volume_usd": 4580,
+  "total_events": 3,
+  "complaint_count": 0,
+  "score_breakdown": {
+    "creation_history": {
+      "score": 3,
+      "max": 15,
+      "description": "Older wallet-linked agents get more trust than freshly created ones."
+    },
+    "transaction_count": {
+      "score": 7.5,
+      "max": 20,
+      "description": "More recorded transactions/actions give more evidence."
+    },
+    "transaction_quality": {
+      "score": 40,
+      "max": 40,
+      "description": "Success rate and handled value increase trust; failed/error outcomes reduce it."
+    },
+    "transaction_frequency": {
+      "score": 9,
+      "max": 15,
+      "description": "Recent consistent activity is better than an inactive passport."
+    },
+    "complaint_health": {
+      "score": 10,
+      "max": 10,
+      "penalty_applied": 0,
+      "description": "Clean complaint history adds trust; open and confirmed complaints reduce it."
+    }
+  }
+}
+```
+
+### `GET /marketplace/listings`
+
+Returns agent marketplace cards with price, availability, capabilities, Trust Score, Risk Level, and marketplace stats.
+
+```json
+[
+  {
+    "agent": {
+      "id": 1,
+      "name": "YieldPilot Alpha",
+      "description": "Autonomous DeFi assistant...",
+      "agent_type": "defi-yield-agent",
+      "owner_wallet": "0x...",
+      "chain_id": 5000,
+      "status": "active",
+      "created_at": "2026-05-19 20:30:00"
+    },
+    "reputation": {
+      "trust_score": 82,
+      "risk_level": "Low",
+      "recommended_wallet_limit_usd": 5460,
+      "successful_volume_usd": 4580,
+      "total_events": 3,
+      "complaint_count": 0
+    },
+    "marketplace": {
+      "listing": {
+        "id": 1,
+        "agent_id": 1,
+        "pricing_model": "rent_daily",
+        "price_usd": 240,
+        "price_token": "USD",
+        "availability": "available",
+        "capabilities": ["defi-routing", "risk-checks"],
+        "terms": "Best for conservative wallet automation with capped permissions.",
+        "created_at": "2026-05-19 20:30:00",
+        "updated_at": "2026-05-19 20:30:00"
+      },
+      "stats": {
+        "rentals_count": 0,
+        "completed_rentals": 0,
+        "disputed_rentals": 0,
+        "completion_rate": 0
+      }
+    }
+  }
+]
+```
+
 ## Enums
 
 - `agent.status`: `active`, `paused`, `retired`

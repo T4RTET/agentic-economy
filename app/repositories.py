@@ -466,15 +466,16 @@ def add_audit_log(db: sqlite3.Connection, agent_id: int | None, action: str, det
 
 
 def build_reputation(db: sqlite3.Connection, agent_id: int) -> dict[str, Any]:
+    agent = get_agent_or_none(db, agent_id)
     events = [
-        ReputationEvent(outcome=row["outcome"], value_usd=row["value_usd"])
-        for row in db.execute("SELECT outcome, value_usd FROM agent_events WHERE agent_id = ?", (agent_id,))
+        ReputationEvent(outcome=row["outcome"], value_usd=row["value_usd"], created_at=row["created_at"])
+        for row in db.execute("SELECT outcome, value_usd, created_at FROM agent_events WHERE agent_id = ?", (agent_id,))
     ]
     complaints = [
         ReputationComplaint(severity=row["severity"], status=row["status"])
         for row in db.execute("SELECT severity, status FROM complaints WHERE agent_id = ?", (agent_id,))
     ]
-    return calculate_reputation(events, complaints).__dict__
+    return calculate_reputation(events, complaints, agent_created_at=agent["created_at"] if agent else None).__dict__
 
 
 def _event_from_row(row: sqlite3.Row) -> dict[str, Any]:

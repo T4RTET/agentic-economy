@@ -110,6 +110,7 @@ class Reputation(BaseModel):
     successful_volume_usd: float
     total_events: int
     complaint_count: int
+    score_breakdown: dict[str, Any]
 
 
 class MarketplaceListingCreate(BaseModel):
