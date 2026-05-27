@@ -20,12 +20,6 @@ Phase 2 is the agent labor marketplace:
 browse marketplace -> rent/buy agent -> completed work updates the passport
 ```
 
-Safe transaction flow:
-
-```text
-check passport intelligence -> prepare transaction request -> user signs in MetaMask -> record tx hash as passport action
-```
-
 Base URL for local development:
 
 ```text
@@ -197,54 +191,6 @@ Read an intelligence report:
 ```http
 GET /agents/{agent_id}/intelligence
 ```
-
-Prepare a safe transaction request:
-
-```http
-POST /agents/{agent_id}/transactions/prepare
-Content-Type: application/json
-
-{
-  "recipient_address": "0x000000000000000000000000000000000000dEaD",
-  "value_usd": 25,
-  "value_wei": "1000000000000000",
-  "chain_id": 5000,
-  "reason": "Pay for completed guarded swap."
-}
-```
-
-Response:
-
-```json
-{
-  "from": "0x7a4A00000000000000000000000000000000A11a",
-  "to": "0x000000000000000000000000000000000000dEaD",
-  "value": "1000000000000000",
-  "chain_id": 5000,
-  "reason": "Pay for completed guarded swap.",
-  "requires_user_signature": true
-}
-```
-
-The backend checks the passport and intelligence report first. `deny` wallet permissions reject preparation. `limit` wallet permissions require `value_usd` to stay within `wallet_permission.recommended_limit_usd`.
-
-Record the user-signed transaction outcome:
-
-```http
-POST /agents/{agent_id}/transactions/record
-Content-Type: application/json
-
-{
-  "tx_hash": "0xtransactionhash",
-  "outcome": "success",
-  "value_usd": 25,
-  "metadata": {
-    "recipient": "0x000000000000000000000000000000000000dEaD"
-  }
-}
-```
-
-The record endpoint creates an agent event, so the transaction appears in `actions_history` and affects future reputation calculations. It does not sign transactions and never accepts private keys or seed phrases.
 
 Confirm or dismiss a complaint:
 

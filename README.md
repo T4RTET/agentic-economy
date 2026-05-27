@@ -7,7 +7,6 @@ FastAPI + SQLite backend for the Agent Reputation Passport MVP.
 - Stores AI agents, completed actions, complaints, and audit entries.
 - Calculates Trust Score, Risk Level, and recommended wallet limit.
 - Verifies MetaMask wallet ownership with signed messages.
-- Prepares safe transaction requests for user wallet signatures without handling private keys.
 - Keeps the legacy wallet connect endpoint available for demo flows.
 - Exposes a frontend-friendly API for a Vite React demo flow.
 - Keeps marketplace/rental endpoints available as phase 2 backend groundwork.
@@ -40,8 +39,6 @@ http://127.0.0.1:8000/docs
 - `POST /agents`
 - `GET /agents/{agent_id}/passport`
 - `GET /agents/{agent_id}/intelligence`
-- `POST /agents/{agent_id}/transactions/prepare`
-- `POST /agents/{agent_id}/transactions/record`
 - `POST /agents/{agent_id}/events`
 - `POST /agents/{agent_id}/complaints`
 - `PATCH /agents/{agent_id}/complaints/{complaint_id}`
@@ -55,8 +52,6 @@ http://127.0.0.1:8000/docs
 - `POST /demo/reset`
 
 `POST /wallet/connect` remains available for backward-compatible demos. Frontends should use `POST /auth/nonce` followed by `POST /auth/verify` for secure MetaMask wallet ownership verification.
-
-Safe transaction endpoints never accept private keys or seed phrases. Use `POST /agents/{agent_id}/transactions/prepare` to get a MetaMask-ready transaction request, then have the user sign/send it in their wallet and call `POST /agents/{agent_id}/transactions/record` with the resulting transaction hash and outcome.
 
 See `API_CONTRACT.md` for frontend integration details.
 
