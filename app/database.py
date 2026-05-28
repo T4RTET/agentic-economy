@@ -103,6 +103,48 @@ def init_db(connection: sqlite3.Connection | None = None) -> None:
                 expires_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS agent_automation_policies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id INTEGER NOT NULL UNIQUE,
+                automation_enabled INTEGER NOT NULL DEFAULT 0,
+                mode TEXT NOT NULL DEFAULT 'manual' CHECK(mode IN ('manual', 'semi_auto', 'full_auto')),
+                max_tx_value_usd REAL NOT NULL DEFAULT 0,
+                daily_limit_usd REAL NOT NULL DEFAULT 0,
+                max_transactions_per_hour INTEGER NOT NULL DEFAULT 0,
+                min_native_balance_wei TEXT NOT NULL DEFAULT '0',
+                require_confirmation_above_usd REAL NOT NULL DEFAULT 0,
+                allowed_chain_ids_json TEXT NOT NULL DEFAULT '[]',
+                allowed_tokens_json TEXT NOT NULL DEFAULT '[]',
+                allowed_recipients_json TEXT NOT NULL DEFAULT '[]',
+                allowed_actions_json TEXT NOT NULL DEFAULT '[]',
+                emergency_stop INTEGER NOT NULL DEFAULT 0,
+                smart_account_address TEXT,
+                delegation_id TEXT,
+                delegation_status TEXT NOT NULL DEFAULT 'none' CHECK(delegation_status IN ('none', 'requested', 'active', 'revoked', 'expired')),
+                delegation_scope_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS agent_automation_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                to_address TEXT NOT NULL,
+                token_address TEXT,
+                value_wei TEXT NOT NULL,
+                value_usd REAL NOT NULL DEFAULT 0,
+                chain_id INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('prepared', 'requires_confirmation', 'delegation_required', 'executed', 'rejected', 'failed')),
+                tx_hash TEXT,
+                reason TEXT,
+                rejection_reason TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 agent_id INTEGER,
