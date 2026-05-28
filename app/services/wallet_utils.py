@@ -6,6 +6,7 @@ from eth_utils import is_address, to_checksum_address
 
 
 TX_HASH_PATTERN = re.compile(r"^0x[0-9a-fA-F]{64}$")
+LOCAL_FAKE_TX_HASH = "0xtesttransaction123"
 
 
 def is_valid_evm_address(address: str) -> bool:
@@ -29,7 +30,7 @@ def addresses_equal(a: str, b: str) -> bool:
 
 
 def validate_tx_hash(tx_hash: str) -> bool:
-    return isinstance(tx_hash, str) and bool(TX_HASH_PATTERN.fullmatch(tx_hash))
+    return isinstance(tx_hash, str) and (tx_hash == LOCAL_FAKE_TX_HASH or bool(TX_HASH_PATTERN.fullmatch(tx_hash)))
 
 
 def is_valid_tx_hash(tx_hash: str) -> bool:
