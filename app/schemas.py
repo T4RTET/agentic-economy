@@ -1,6 +1,8 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
+
+from app.services.wallet_utils import is_non_negative_integer_string, normalize_wallet_address
 
 
 AgentStatus = Literal["active", "paused", "retired"]
@@ -12,6 +14,9 @@ ListingAvailability = Literal["available", "rented", "paused"]
 RentalStatus = Literal["pending", "active", "completed", "disputed", "cancelled"]
 WalletPermissionDecision = Literal["allow", "limit", "deny"]
 RiskAssessmentConfidence = Literal["low", "medium", "high"]
+AutomationMode = Literal["manual", "semi_auto", "full_auto"]
+DelegationStatus = Literal["none", "requested", "active", "revoked", "expired"]
+AutomationAttemptStatus = Literal["prepared", "requires_confirmation", "delegation_required", "executed", "rejected", "failed"]
 
 
 class AgentCreate(BaseModel):
@@ -84,32 +89,143 @@ class AgentEvent(BaseModel):
     created_at: str
 
 
-class TransactionPrepareRequest(BaseModel):
-    recipient_address: str = Field(min_length=6, max_length=120)
-    value_usd: float = Field(ge=0)
+class AutomationPolicy(BaseModel):
+    id: int
+    agent_id: int
+    automation_enabled: bool
+    mode: AutomationMode
+    max_tx_value_usd: float
+    daily_limit_usd: float
+    max_transactions_per_hour: int
+    min_native_balance_wei: str
+    require_confirmation_above_usd: float
+    allowed_chain_ids: list[int]
+    allowed_tokens: list[str]
+    allowed_recipients: list[str]
+    allowed_actions: list[str]
+    emergency_stop: bool
+    smart_account_address: str | None = None
+    delegation_id: str | None = None
+    delegation_status: DelegationStatus
+    delegation_scope: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+    updated_at: str
+
+
+class AutomationPolicyUpdate(BaseModel):
+    automation_enabled: bool = False
+    mode: AutomationMode = "manual"
+    max_tx_value_usd: float = Field(default=0, ge=0)
+    daily_limit_usd: float = Field(default=0, ge=0)
+    max_transactions_per_hour: int = Field(default=0, ge=0)
+    min_native_balance_wei: str = "0"
+    require_confirmation_above_usd: float = Field(default=0, ge=0)
+    allowed_chain_ids: list[int] = Field(default_factory=list)
+    allowed_tokens: list[str] = Field(default_factory=list)
+    allowed_recipients: list[str] = Field(default_factory=list)
+    allowed_actions: list[str] = Field(default_factory=list)
+    emergency_stop: bool = False
+
+    @field_validator("min_native_balance_wei")
+    @classmethod
+    def validate_min_native_balance(cls, value: str) -> str:
+        return _validate_wei_string(value)
+
+    @field_validator("allowed_chain_ids")
+    @classmethod
+    def validate_allowed_chain_ids(cls, values: list[int]) -> list[int]:
+        if any(item <= 0 for item in values):
+            raise ValueError("allowed_chain_ids must contain positive integers")
+        return values
+
+    @field_validator("allowed_tokens")
+    @classmethod
+    def validate_allowed_tokens(cls, values: list[str]) -> list[str]:
+        return _normalize_token_list(values)
+
+    @field_validator("allowed_recipients")
+    @classmethod
+    def validate_allowed_recipients(cls, values: list[str]) -> list[str]:
+        return _normalize_address_list(values)
+
+
+class AutomationActionRequest(BaseModel):
+    action_type: str = Field(default="native_transfer", min_length=2, max_length=80)
+    to_address: str = Field(validation_alias=AliasChoices("to_address", "recipient", "recipient_address"), min_length=6, max_length=120)
+    token_address: str | None = Field(default=None, min_length=6, max_length=120)
     value_wei: str = Field(min_length=1, max_length=120)
-    chain_id: int = 5000
-    reason: str = Field(default="Prepared by Agent Reputation Passport.", min_length=1, max_length=500)
-
-
-class TransactionPrepareResponse(BaseModel):
-    from_address: str = Field(alias="from")
-    to: str
-    value: str
-    chain_id: int
-    reason: str
-    requires_user_signature: bool
-
-
-class TransactionRecordRequest(BaseModel):
-    tx_hash: str = Field(min_length=6, max_length=120)
-    outcome: EventOutcome
     value_usd: float = Field(default=0, ge=0)
+    chain_id: int = 5000
+    reason: str = Field(default="Automated wallet action", max_length=500)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    current_native_balance_wei: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @field_validator("to_address")
+    @classmethod
+    def normalize_to_address(cls, value: str) -> str:
+        return _normalize_address(value)
+
+    @field_validator("token_address")
+    @classmethod
+    def normalize_token_address(cls, value: str | None) -> str | None:
+        return _normalize_optional_address(value)
+
+    @field_validator("value_wei")
+    @classmethod
+    def validate_value_wei(cls, value: str) -> str:
+        return _validate_wei_string(value)
+
+    @field_validator("current_native_balance_wei")
+    @classmethod
+    def validate_current_native_balance(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_wei_string(value)
 
 
-class TransactionRecordResponse(BaseModel):
-    event: AgentEvent
+class AutomationEvaluationResponse(BaseModel):
+    allowed: bool
+    requires_user_confirmation: bool
+    can_auto_execute: bool
+    delegation_required: bool
+    reason: str
+    violations: list[str]
+
+
+class DelegationRequestResponse(BaseModel):
+    agent_id: int
+    delegation_status: DelegationStatus
+    message: str
+    policy_scope: dict[str, Any]
+    request: dict[str, Any]
+
+
+class DelegationConfirmRequest(BaseModel):
+    smart_account_address: str = Field(min_length=6, max_length=120)
+    delegation_id: str = Field(min_length=2, max_length=200)
+    delegation_scope: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("smart_account_address")
+    @classmethod
+    def normalize_smart_account_address(cls, value: str) -> str:
+        return _normalize_address(value)
+
+
+class AutomatedTransactionRequest(AutomationActionRequest):
+    pass
+
+
+class AutomatedTransactionResponse(BaseModel):
+    executed: bool = False
+    requires_user_confirmation: bool = False
+    delegation_required: bool = False
+    status: AutomationAttemptStatus
+    reason: str
+    attempt_id: int
+    transaction_request: dict[str, Any] | None = None
+    smart_account_execution_payload: dict[str, Any] | None = None
+    tx_hash: str | None = None
+    evaluation: AutomationEvaluationResponse
 
 
 class ComplaintCreate(BaseModel):
@@ -138,6 +254,7 @@ class Reputation(BaseModel):
     successful_volume_usd: float
     total_events: int
     complaint_count: int
+    score_breakdown: dict[str, Any]
 
 
 class MarketplaceListingCreate(BaseModel):
@@ -259,3 +376,36 @@ class AgentIntelligenceReport(BaseModel):
 class DemoResetResponse(BaseModel):
     status: Literal["reset"]
     agents_seeded: int
+
+
+def _normalize_address(value: str) -> str:
+    try:
+        return normalize_wallet_address(value)
+    except ValueError as exc:
+        raise ValueError("Invalid EVM address") from exc
+
+
+def _normalize_optional_address(value: str | None) -> str | None:
+    if value in {None, ""}:
+        return None
+    return _normalize_address(value)
+
+
+def _normalize_address_list(values: list[str]) -> list[str]:
+    return [_normalize_address(value) for value in values]
+
+
+def _normalize_token_list(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for value in values:
+        if value.upper() == "NATIVE":
+            normalized.append("NATIVE")
+        else:
+            normalized.append(_normalize_address(value))
+    return normalized
+
+
+def _validate_wei_string(value: str) -> str:
+    if not is_non_negative_integer_string(value):
+        raise ValueError("Value must be a non-negative integer string")
+    return value

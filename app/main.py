@@ -5,11 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
 from app.routers.agents import router as agents_router
+from app.routers.automation import router as automation_router
 from app.routers.auth import router as auth_router
 from app.routers.demo import router as demo_router
 from app.routers.intelligence import router as intelligence_router
 from app.routers.marketplace import router as marketplace_router
-from app.routers.transactions import router as transactions_router
 from app.routers.wallet import router as wallet_router
 
 
@@ -46,4 +46,4 @@ app.include_router(wallet_router)
 app.include_router(demo_router)
 app.include_router(marketplace_router)
 app.include_router(intelligence_router)
-app.include_router(transactions_router)
+app.include_router(automation_router)
