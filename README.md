@@ -81,6 +81,27 @@ The backend does not ask for seed phrases, does not accept private keys, and doe
 
 Never paste a seed phrase into this app.
 
+## Minimal User Action Automation Flow
+
+The frontend now has a simplified Russian-language setup path for automation:
+
+1. Open `http://localhost:5173`.
+2. Click `Connect MetaMask`.
+3. Click `Verify Wallet` and sign the ownership message in MetaMask.
+4. Choose the `Safe`, `Balanced`, or `Custom` automation preset.
+5. Click `Enable Automation / Включить автоматизацию`.
+6. Confirm Smart Account / Delegation in MetaMask when a real SDK is connected.
+7. For local backend/UI testing, click `Confirm Test Delegation` to store test delegation metadata.
+8. The agent can then evaluate automated actions and only act inside policy limits.
+
+Safety notes:
+
+- Do not enter a seed phrase.
+- Do not enter a private key.
+- A normal MetaMask EOA cannot silently auto-confirm transactions.
+- Real automation requires MetaMask Smart Account / Delegation.
+- Test Delegation is only for local backend flow testing.
+
 See `API_CONTRACT.md` for frontend integration details.
 
 ## Frontend
