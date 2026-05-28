@@ -20,12 +20,6 @@ Phase 2 is the agent labor marketplace:
 browse marketplace -> rent/buy agent -> completed work updates the passport
 ```
 
-Safe transaction flow:
-
-```text
-check passport intelligence -> prepare transaction request -> user signs in MetaMask -> record tx hash as passport action
-```
-
 Base URL for local development:
 
 ```text
@@ -198,54 +192,6 @@ Read an intelligence report:
 GET /agents/{agent_id}/intelligence
 ```
 
-Prepare a safe transaction request:
-
-```http
-POST /agents/{agent_id}/transactions/prepare
-Content-Type: application/json
-
-{
-  "recipient_address": "0x000000000000000000000000000000000000dEaD",
-  "value_usd": 25,
-  "value_wei": "1000000000000000",
-  "chain_id": 5000,
-  "reason": "Pay for completed guarded swap."
-}
-```
-
-Response:
-
-```json
-{
-  "from": "0x7a4A00000000000000000000000000000000A11a",
-  "to": "0x000000000000000000000000000000000000dEaD",
-  "value": "1000000000000000",
-  "chain_id": 5000,
-  "reason": "Pay for completed guarded swap.",
-  "requires_user_signature": true
-}
-```
-
-The backend checks the passport and intelligence report first. `deny` wallet permissions reject preparation. `limit` wallet permissions require `value_usd` to stay within `wallet_permission.recommended_limit_usd`.
-
-Record the user-signed transaction outcome:
-
-```http
-POST /agents/{agent_id}/transactions/record
-Content-Type: application/json
-
-{
-  "tx_hash": "0xtransactionhash",
-  "outcome": "success",
-  "value_usd": 25,
-  "metadata": {
-    "recipient": "0x000000000000000000000000000000000000dEaD"
-  }
-}
-```
-
-The record endpoint creates an agent event, so the transaction appears in `actions_history` and affects future reputation calculations. It does not sign transactions and never accepts private keys or seed phrases.
-
 Confirm or dismiss a complaint:
 
 ```http
@@ -371,6 +317,145 @@ Returns wallet permission, risk assessment, marketplace verdict, and suggested n
   },
   "suggested_next_actions": ["Allow broader permissions within the recommended wallet limit."]
 }
+```
+
+## Trust Score Formula
+
+Trust Score is calculated on a `0..100` scale from transparent criteria:
+
+```text
+Trust Score =
+  creation_history       up to 10
++ wallet_verification    up to 10
++ transaction_count      up to 15
++ transaction_quality    up to 30
++ transaction_frequency  up to 10
++ onchain_evidence       up to 10
++ task_diversity         up to 5
++ value_experience       up to 10
++ complaint_health       up to 10, can go negative if complaints are serious
+```
+
+Criteria:
+
+- `creation_history`: older wallet-linked agents receive more trust than freshly created agents.
+- `wallet_verification`: MetaMask signed-message verification proves wallet ownership.
+- `transaction_count`: more recorded actions give more evidence.
+- `transaction_quality`: successful outcomes and handled value increase trust; failed/error outcomes reduce quality.
+- `transaction_frequency`: recent consistent activity is better than inactivity.
+- `onchain_evidence`: actions with transaction hashes are easier to verify.
+- `task_diversity`: successful activity across multiple categories reduces single-use uncertainty.
+- `value_experience`: successfully handled value adds confidence, but the impact is capped.
+- `complaint_health`: clean complaint history adds trust; open/confirmed complaints reduce it by weighted severity.
+
+The API returns a machine-readable breakdown:
+
+```json
+{
+  "trust_score": 82,
+  "risk_level": "Low",
+  "recommended_wallet_limit_usd": 5460,
+  "successful_volume_usd": 4580,
+  "total_events": 3,
+  "complaint_count": 0,
+  "score_breakdown": {
+    "creation_history": {
+      "score": 5,
+      "max": 10,
+      "description": "Older wallet-linked agents get more trust than freshly created ones."
+    },
+    "wallet_verification": {
+      "score": 10,
+      "max": 10,
+      "description": "Wallet ownership verified by signed message increases confidence."
+    },
+    "transaction_count": {
+      "score": 9,
+      "max": 15,
+      "description": "More recorded transactions/actions give more evidence."
+    },
+    "transaction_quality": {
+      "score": 30,
+      "max": 30,
+      "description": "Success rate and handled value increase trust; failed/error outcomes reduce it."
+    },
+    "transaction_frequency": {
+      "score": 9,
+      "max": 10,
+      "description": "Recent consistent activity is better than an inactive passport."
+    },
+    "onchain_evidence": {
+      "score": 6.67,
+      "max": 10,
+      "description": "Actions with transaction hashes are easier to verify."
+    },
+    "task_diversity": {
+      "score": 5,
+      "max": 5,
+      "description": "Successful activity across multiple task categories reduces single-use uncertainty."
+    },
+    "value_experience": {
+      "score": 9.33,
+      "max": 10,
+      "description": "Higher successfully handled value adds confidence with a capped impact."
+    },
+    "complaint_health": {
+      "score": 10,
+      "max": 10,
+      "penalty_applied": 0,
+      "description": "Clean complaint history adds trust; open and confirmed complaints reduce it."
+    }
+  }
+}
+```
+
+### `GET /marketplace/listings`
+
+Returns agent marketplace cards with price, availability, capabilities, Trust Score, Risk Level, and marketplace stats.
+
+```json
+[
+  {
+    "agent": {
+      "id": 1,
+      "name": "YieldPilot Alpha",
+      "description": "Autonomous DeFi assistant...",
+      "agent_type": "defi-yield-agent",
+      "owner_wallet": "0x...",
+      "chain_id": 5000,
+      "status": "active",
+      "created_at": "2026-05-19 20:30:00"
+    },
+    "reputation": {
+      "trust_score": 82,
+      "risk_level": "Low",
+      "recommended_wallet_limit_usd": 5460,
+      "successful_volume_usd": 4580,
+      "total_events": 3,
+      "complaint_count": 0
+    },
+    "marketplace": {
+      "listing": {
+        "id": 1,
+        "agent_id": 1,
+        "pricing_model": "rent_daily",
+        "price_usd": 240,
+        "price_token": "USD",
+        "availability": "available",
+        "capabilities": ["defi-routing", "risk-checks"],
+        "terms": "Best for conservative wallet automation with capped permissions.",
+        "created_at": "2026-05-19 20:30:00",
+        "updated_at": "2026-05-19 20:30:00"
+      },
+      "stats": {
+        "rentals_count": 0,
+        "completed_rentals": 0,
+        "disputed_rentals": 0,
+        "completion_rate": 0
+      }
+    }
+  }
+]
 ```
 
 ## Enums

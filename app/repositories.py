@@ -466,15 +466,31 @@ def add_audit_log(db: sqlite3.Connection, agent_id: int | None, action: str, det
 
 
 def build_reputation(db: sqlite3.Connection, agent_id: int) -> dict[str, Any]:
+    agent = get_agent_or_none(db, agent_id)
     events = [
-        ReputationEvent(outcome=row["outcome"], value_usd=row["value_usd"])
-        for row in db.execute("SELECT outcome, value_usd FROM agent_events WHERE agent_id = ?", (agent_id,))
+        ReputationEvent(
+            outcome=row["outcome"],
+            value_usd=row["value_usd"],
+            created_at=row["created_at"],
+            category=row["category"],
+            tx_hash=row["tx_hash"],
+        )
+        for row in db.execute(
+            "SELECT outcome, value_usd, created_at, category, tx_hash FROM agent_events WHERE agent_id = ?",
+            (agent_id,),
+        )
     ]
     complaints = [
         ReputationComplaint(severity=row["severity"], status=row["status"])
         for row in db.execute("SELECT severity, status FROM complaints WHERE agent_id = ?", (agent_id,))
     ]
-    return calculate_reputation(events, complaints).__dict__
+    wallet_verified = _wallet_is_verified(db, agent["owner_wallet"], agent["chain_id"]) if agent else False
+    return calculate_reputation(
+        events,
+        complaints,
+        agent_created_at=agent["created_at"] if agent else None,
+        wallet_verified=wallet_verified,
+    ).__dict__
 
 
 def _event_from_row(row: sqlite3.Row) -> dict[str, Any]:
@@ -502,3 +518,16 @@ def _calculate_rental_price(listing: dict[str, Any], duration_hours: int) -> flo
         days = max(1, math.ceil(duration_hours / 24))
         return round(listing["price_usd"] * days, 2)
     return round(listing["price_usd"], 2)
+
+
+def _wallet_is_verified(db: sqlite3.Connection, wallet_address: str, chain_id: int) -> bool:
+    row = db.execute(
+        """
+        SELECT id
+        FROM wallet_auth_nonces
+        WHERE lower(wallet_address) = lower(?) AND chain_id = ? AND used = 1
+        LIMIT 1
+        """,
+        (wallet_address, chain_id),
+    ).fetchone()
+    return row is not None
