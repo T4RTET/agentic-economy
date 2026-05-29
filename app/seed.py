@@ -70,8 +70,8 @@ def seed_demo_data(reset: bool = False, connection: sqlite3.Connection | None = 
                 owner_wallet="0x9c6C00000000000000000000000000000000C33c",
             ),
         )
-        create_event(db, high_risk["id"], AgentEventCreate(title="Opened aggressive strategy", category="leverage", outcome="success", value_usd=700, tx_hash="0xmantle-high-001"))
-        create_event(db, high_risk["id"], AgentEventCreate(title="Failed liquidation protection check", category="risk-check", outcome="error", value_usd=1200, tx_hash="0xmantle-high-002"))
+        create_event(db, high_risk["id"], AgentEventCreate(title="Opened aggressive strategy", category="leverage", outcome="success", value_usd=700))
+        create_event(db, high_risk["id"], AgentEventCreate(title="Failed liquidation protection check", category="risk-check", outcome="error", value_usd=1200))
         create_event(db, high_risk["id"], AgentEventCreate(title="Reported stale pool data", category="data", outcome="failed", value_usd=0))
         create_complaint(db, high_risk["id"], ComplaintCreate(reason="Agent recommended an unsafe wallet limit for a volatile strategy.", severity="high", status="confirmed"))
         create_complaint(db, high_risk["id"], ComplaintCreate(reason="User disputed the agent's explanation of risk.", severity="medium", status="open"))

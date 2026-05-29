@@ -17,13 +17,6 @@ RiskAssessmentConfidence = Literal["low", "medium", "high"]
 AutomationMode = Literal["manual", "semi_auto", "full_auto"]
 DelegationStatus = Literal["none", "requested", "active", "revoked", "expired"]
 AutomationAttemptStatus = Literal["prepared", "requires_confirmation", "delegation_required", "executed", "rejected", "failed"]
-MantleCriterionId = Literal[
-    "technical",
-    "ecosystem_fit",
-    "business_potential",
-    "innovation",
-    "user_experience",
-]
 
 
 class AgentCreate(BaseModel):
@@ -311,39 +304,6 @@ class PassportAnalysis(BaseModel):
     recommendation: str
 
 
-class MantleCriterionScore(BaseModel):
-    criterion: MantleCriterionId
-    label: str
-    weight_percent: int
-    raw_score: float
-    weighted_score: float
-    max_weighted_score: float
-    evidence: list[str]
-    recommendations: list[str]
-
-
-class MantleReadinessReport(BaseModel):
-    overall_score: float
-    grade: Literal["excellent", "good", "average", "below_average", "weak"]
-    summary: str
-    criteria: list[MantleCriterionScore]
-    next_steps: list[str]
-
-
-class MantleProjectReadinessReport(BaseModel):
-    overall_score: float
-    grade: Literal["excellent", "good", "average", "below_average", "weak"]
-    summary: str
-    agent_count: int
-    average_agent_score: float
-    grade_distribution: dict[str, int]
-    risk_distribution: dict[str, int]
-    top_agent: Agent | None
-    judging_alignment: list[MantleCriterionScore]
-    recommended_demo_flow: list[str]
-    next_steps: list[str]
-
-
 class RentalCreate(BaseModel):
     renter_wallet: str = Field(min_length=6, max_length=120)
     task_title: str = Field(min_length=2, max_length=160)
@@ -375,7 +335,6 @@ class AgentPassport(BaseModel):
     reputation: Reputation
     marketplace: MarketplaceInfo
     analysis: PassportAnalysis
-    mantle_readiness: MantleReadinessReport
     actions_history: list[AgentEvent]
     complaints: list[Complaint]
     audit_log: list[dict[str, Any]]

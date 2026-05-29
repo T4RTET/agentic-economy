@@ -172,12 +172,6 @@ Content-Type: application/json
 GET /agents/{agent_id}/passport
 ```
 
-7. Show judge-oriented Mantle readiness:
-
-```http
-GET /mantle/agents/{agent_id}/readiness
-```
-
 ## Phase 1 Supporting Endpoints
 
 Load all seeded/demo agents:
@@ -196,18 +190,6 @@ Read an intelligence report:
 
 ```http
 GET /agents/{agent_id}/intelligence
-```
-
-Read a Mantle judging readiness report:
-
-```http
-GET /mantle/agents/{agent_id}/readiness
-```
-
-Read the project-level Mantle judging summary:
-
-```http
-GET /mantle/readiness
 ```
 
 Confirm or dismiss a complaint:
@@ -307,84 +289,9 @@ Returns everything needed for the passport page:
 - `reputation`
 - `marketplace`
 - `analysis`
-- `mantle_readiness`
 - `actions_history`
 - `complaints`
 - `audit_log`
-
-### `GET /mantle/agents/{agent_id}/readiness`
-
-Returns a judge-oriented score mapped to Mantle's official project criteria.
-
-```json
-{
-  "overall_score": 82.5,
-  "grade": "good",
-  "summary": "Mantle readiness score 82.5/100 (good).",
-  "criteria": [
-    {
-      "criterion": "technical",
-      "label": "Technical quality",
-      "weight_percent": 30,
-      "raw_score": 8.5,
-      "weighted_score": 25.5,
-      "max_weighted_score": 30,
-      "evidence": ["Trust Score has a transparent machine-readable score_breakdown."],
-      "recommendations": []
-    }
-  ],
-  "next_steps": ["Use the wallet -> passport -> intelligence flow as the primary judging demo."]
-}
-```
-
-Mantle judging weights used by the backend:
-
-- `technical`: 30% architecture, security, code quality, completeness.
-- `ecosystem_fit`: 20% Mantle chain fit, DeFi/CeFi asset relevance, ecosystem contribution.
-- `business_potential`: 20% PMF, monetization path, market demand, go-to-market potential.
-- `innovation`: 20% originality, differentiated advantage, technical or model breakthrough.
-- `user_experience`: 10% onboarding clarity, wallet UX, friction reduction for Web2/Web3 users.
-
-The final score is risk-adjusted: high-risk agents cannot receive an excellent readiness grade, and unresolved complaints reduce the overall score. This keeps the judging report aligned with the actual passport risk.
-
-### `GET /mantle/readiness`
-
-Returns a project-level judging summary across all agent passports in the backend demo.
-`grade_distribution` and `risk_distribution` always include all known keys, even when a count is `0`, so frontend charts can render without defensive remapping.
-
-```json
-{
-  "overall_score": 86.2,
-  "grade": "good",
-  "summary": "Project Mantle readiness score 86.2/100 (good) across 3 agent passport(s).",
-  "agent_count": 3,
-  "average_agent_score": 78.1,
-  "grade_distribution": {
-    "excellent": 1,
-    "good": 1,
-    "average": 1
-  },
-  "risk_distribution": {
-    "Low": 1,
-    "Medium": 1,
-    "High": 1
-  },
-  "top_agent": {
-    "id": 1,
-    "name": "YieldPilot Alpha"
-  },
-  "judging_alignment": [],
-  "recommended_demo_flow": [
-    "POST /auth/nonce",
-    "POST /auth/verify",
-    "GET /agents/{agent_id}/passport",
-    "GET /agents/{agent_id}/intelligence",
-    "GET /mantle/agents/{agent_id}/readiness",
-    "GET /mantle/readiness"
-  ],
-  "next_steps": []
-}
-```
 
 ### `GET /agents/{agent_id}/intelligence`
 

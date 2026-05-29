@@ -40,8 +40,6 @@ http://127.0.0.1:8000/docs
 - `POST /agents`
 - `GET /agents/{agent_id}/passport`
 - `GET /agents/{agent_id}/intelligence`
-- `GET /mantle/readiness`
-- `GET /mantle/agents/{agent_id}/readiness`
 - `POST /agents/{agent_id}/events`
 - `POST /agents/{agent_id}/complaints`
 - `PATCH /agents/{agent_id}/complaints/{complaint_id}`
