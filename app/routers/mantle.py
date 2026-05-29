@@ -4,10 +4,23 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app import repositories
 from app.database import get_db
-from app.schemas import MantleReadinessReport
+from app.schemas import MantleProjectReadinessReport, MantleReadinessReport
+from app.services.mantle_readiness import build_project_mantle_readiness_report
 
 
 router = APIRouter(prefix="/mantle", tags=["mantle readiness"])
+
+
+@router.get("/readiness", response_model=MantleProjectReadinessReport)
+def get_project_mantle_readiness(
+    db: sqlite3.Connection = Depends(get_db),
+) -> MantleProjectReadinessReport:
+    passports = [
+        passport
+        for agent in repositories.list_agents(db)
+        if (passport := repositories.build_passport(db, agent["id"])) is not None
+    ]
+    return build_project_mantle_readiness_report(passports)
 
 
 @router.get("/agents/{agent_id}/readiness", response_model=MantleReadinessReport)

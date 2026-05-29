@@ -87,6 +87,12 @@ def test_agent_passport_flow() -> None:
         assert mantle_response.status_code == 200
         assert mantle_response.json()["summary"].startswith("Mantle readiness score")
 
+        project_mantle_response = client.get("/mantle/readiness")
+        assert project_mantle_response.status_code == 200
+        project_mantle = project_mantle_response.json()
+        assert project_mantle["agent_count"] == 1
+        assert project_mantle["recommended_demo_flow"]
+
         list_response = client.get("/agents")
         assert list_response.status_code == 200
         assert len(list_response.json()) == 1
@@ -105,6 +111,13 @@ def test_agent_passport_flow() -> None:
         seeded_agents_response = client.get("/agents")
         assert seeded_agents_response.status_code == 200
         assert len(seeded_agents_response.json()) == 3
+
+        seeded_project_mantle_response = client.get("/mantle/readiness")
+        assert seeded_project_mantle_response.status_code == 200
+        seeded_project = seeded_project_mantle_response.json()
+        assert seeded_project["agent_count"] == 3
+        assert seeded_project["top_agent"]
+        assert set(seeded_project["risk_distribution"]) >= {"Low", "Medium", "High"}
 
 
         marketplace_response = client.get("/marketplace/listings")

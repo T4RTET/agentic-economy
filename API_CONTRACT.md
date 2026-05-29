@@ -204,6 +204,12 @@ Read a Mantle judging readiness report:
 GET /mantle/agents/{agent_id}/readiness
 ```
 
+Read the project-level Mantle judging summary:
+
+```http
+GET /mantle/readiness
+```
+
 Confirm or dismiss a complaint:
 
 ```http
@@ -340,6 +346,44 @@ Mantle judging weights used by the backend:
 - `user_experience`: 10% onboarding clarity, wallet UX, friction reduction for Web2/Web3 users.
 
 The final score is risk-adjusted: high-risk agents cannot receive an excellent readiness grade, and unresolved complaints reduce the overall score. This keeps the judging report aligned with the actual passport risk.
+
+### `GET /mantle/readiness`
+
+Returns a project-level judging summary across all agent passports in the backend demo.
+
+```json
+{
+  "overall_score": 86.2,
+  "grade": "good",
+  "summary": "Project Mantle readiness score 86.2/100 (good) across 3 agent passport(s).",
+  "agent_count": 3,
+  "average_agent_score": 78.1,
+  "grade_distribution": {
+    "excellent": 1,
+    "good": 1,
+    "average": 1
+  },
+  "risk_distribution": {
+    "Low": 1,
+    "Medium": 1,
+    "High": 1
+  },
+  "top_agent": {
+    "id": 1,
+    "name": "YieldPilot Alpha"
+  },
+  "judging_alignment": [],
+  "recommended_demo_flow": [
+    "POST /auth/nonce",
+    "POST /auth/verify",
+    "GET /agents/{agent_id}/passport",
+    "GET /agents/{agent_id}/intelligence",
+    "GET /mantle/agents/{agent_id}/readiness",
+    "GET /mantle/readiness"
+  ],
+  "next_steps": []
+}
+```
 
 ### `GET /agents/{agent_id}/intelligence`
 

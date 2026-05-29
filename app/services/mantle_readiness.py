@@ -4,6 +4,13 @@ from typing import Any
 
 
 MANTLE_CHAIN_IDS = {5000, 5001}
+CRITERION_WEIGHTS = {
+    "technical": 30,
+    "ecosystem_fit": 20,
+    "business_potential": 20,
+    "innovation": 20,
+    "user_experience": 10,
+}
 
 
 def build_mantle_readiness_report(passport: dict[str, Any]) -> dict[str, Any]:
@@ -22,6 +29,45 @@ def build_mantle_readiness_report(passport: dict[str, Any]) -> dict[str, Any]:
         "summary": _summary(overall_score, grade),
         "criteria": criteria,
         "next_steps": _next_steps(criteria),
+    }
+
+
+def build_project_mantle_readiness_report(passports: list[dict[str, Any]]) -> dict[str, Any]:
+    if not passports:
+        return {
+            "overall_score": 0.0,
+            "grade": "weak",
+            "summary": "Mantle readiness score 0/100 (weak): no agent passports are available.",
+            "agent_count": 0,
+            "average_agent_score": 0.0,
+            "grade_distribution": {},
+            "risk_distribution": {},
+            "top_agent": None,
+            "judging_alignment": _empty_project_criteria(),
+            "recommended_demo_flow": _recommended_demo_flow(),
+            "next_steps": ["Seed demo data or create at least one wallet-linked agent passport."],
+        }
+
+    reports = [passport["mantle_readiness"] for passport in passports]
+    agent_scores = [float(report["overall_score"]) for report in reports]
+    average_agent_score = round(sum(agent_scores) / len(agent_scores), 2)
+    best_index = max(range(len(passports)), key=lambda index: agent_scores[index])
+    judging_alignment = _aggregate_criteria(reports)
+    project_score = round((average_agent_score * 0.7) + (_criteria_average(judging_alignment) * 0.3), 2)
+    grade = _grade(project_score)
+
+    return {
+        "overall_score": project_score,
+        "grade": grade,
+        "summary": f"Project Mantle readiness score {project_score}/100 ({grade}) across {len(passports)} agent passport(s).",
+        "agent_count": len(passports),
+        "average_agent_score": average_agent_score,
+        "grade_distribution": _count_by(reports, "grade"),
+        "risk_distribution": _risk_distribution(passports),
+        "top_agent": passports[best_index]["agent"],
+        "judging_alignment": judging_alignment,
+        "recommended_demo_flow": _recommended_demo_flow(),
+        "next_steps": _project_next_steps(passports, reports, judging_alignment),
     }
 
 
@@ -247,6 +293,58 @@ def _criterion(
     }
 
 
+def _aggregate_criteria(reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for report in reports:
+        for criterion in report["criteria"]:
+            grouped.setdefault(criterion["criterion"], []).append(criterion)
+
+    result: list[dict[str, Any]] = []
+    for criterion_id, weight in CRITERION_WEIGHTS.items():
+        items = grouped.get(criterion_id, [])
+        if not items:
+            result.append(
+                _criterion(
+                    criterion=criterion_id,
+                    label=_criterion_label(criterion_id),
+                    weight_percent=weight,
+                    raw_score=0,
+                    evidence=[],
+                    recommendations=["No evidence for this judging criterion yet."],
+                )
+            )
+            continue
+
+        raw_score = sum(float(item["raw_score"]) for item in items) / len(items)
+        evidence = _dedupe([entry for item in items for entry in item["evidence"]])[:5]
+        recommendations = _dedupe([entry for item in items for entry in item["recommendations"]])[:5]
+        result.append(
+            _criterion(
+                criterion=criterion_id,
+                label=_criterion_label(criterion_id),
+                weight_percent=weight,
+                raw_score=raw_score,
+                evidence=evidence,
+                recommendations=recommendations,
+            )
+        )
+    return result
+
+
+def _empty_project_criteria() -> list[dict[str, Any]]:
+    return [
+        _criterion(
+            criterion=criterion_id,
+            label=_criterion_label(criterion_id),
+            weight_percent=weight,
+            raw_score=0,
+            evidence=[],
+            recommendations=["Create demo passports to generate judging evidence."],
+        )
+        for criterion_id, weight in CRITERION_WEIGHTS.items()
+    ]
+
+
 def _grade(score: float) -> str:
     if score >= 90:
         return "excellent"
@@ -283,6 +381,63 @@ def _next_steps(criteria: list[dict[str, Any]]) -> list[str]:
     if not steps:
         steps.append("Use the wallet -> passport -> intelligence flow as the primary judging demo.")
     return _dedupe(steps)
+
+
+def _project_next_steps(
+    passports: list[dict[str, Any]],
+    reports: list[dict[str, Any]],
+    criteria: list[dict[str, Any]],
+) -> list[str]:
+    steps = _dedupe([entry for criterion in criteria for entry in criterion["recommendations"]])
+    risk_distribution = _risk_distribution(passports)
+    if risk_distribution.get("High", 0):
+        steps.append("Use the Low-risk passport as the main demo and keep High-risk agents as contrast cases.")
+    if not any(report["grade"] == "excellent" for report in reports):
+        steps.append("Improve one flagship agent until it reaches an excellent Mantle readiness grade.")
+    if not steps:
+        steps.append("Lead the demo with wallet verification, passport scoring, intelligence, and Mantle readiness.")
+    return _dedupe(steps)
+
+
+def _recommended_demo_flow() -> list[str]:
+    return [
+        "POST /auth/nonce",
+        "POST /auth/verify",
+        "GET /agents/{agent_id}/passport",
+        "GET /agents/{agent_id}/intelligence",
+        "GET /mantle/agents/{agent_id}/readiness",
+        "GET /mantle/readiness",
+    ]
+
+
+def _criteria_average(criteria: list[dict[str, Any]]) -> float:
+    return round(sum(float(item["weighted_score"]) for item in criteria), 2)
+
+
+def _count_by(items: list[dict[str, Any]], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        value = str(item.get(key, "unknown"))
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def _risk_distribution(passports: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for passport in passports:
+        risk = str(passport.get("reputation", {}).get("risk_level", "unknown"))
+        counts[risk] = counts.get(risk, 0) + 1
+    return counts
+
+
+def _criterion_label(criterion_id: str) -> str:
+    return {
+        "technical": "Technical quality",
+        "ecosystem_fit": "Mantle ecosystem fit",
+        "business_potential": "Business potential",
+        "innovation": "Innovation",
+        "user_experience": "User experience",
+    }.get(criterion_id, criterion_id)
 
 
 def _categories(events: list[dict[str, Any]]) -> set[str]:

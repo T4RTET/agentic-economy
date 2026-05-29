@@ -330,6 +330,20 @@ class MantleReadinessReport(BaseModel):
     next_steps: list[str]
 
 
+class MantleProjectReadinessReport(BaseModel):
+    overall_score: float
+    grade: Literal["excellent", "good", "average", "below_average", "weak"]
+    summary: str
+    agent_count: int
+    average_agent_score: float
+    grade_distribution: dict[str, int]
+    risk_distribution: dict[str, int]
+    top_agent: Agent | None
+    judging_alignment: list[MantleCriterionScore]
+    recommended_demo_flow: list[str]
+    next_steps: list[str]
+
+
 class RentalCreate(BaseModel):
     renter_wallet: str = Field(min_length=6, max_length=120)
     task_title: str = Field(min_length=2, max_length=160)
