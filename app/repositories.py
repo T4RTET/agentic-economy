@@ -367,9 +367,9 @@ def build_marketplace_info(db: sqlite3.Connection, agent_id: int) -> dict[str, A
         """,
         (agent_id,),
     ).fetchone()
-    rentals_count = int(stats["rentals_count"] or 0)
-    completed = int(stats["completed_rentals"] or 0)
-    disputed = int(stats["disputed_rentals"] or 0)
+    rentals_count = _row_int(stats, "rentals_count")
+    completed = _row_int(stats, "completed_rentals")
+    disputed = _row_int(stats, "disputed_rentals")
     completion_rate = round(completed / rentals_count, 2) if rentals_count else 0.0
     return {
         "listing": listing,
@@ -387,9 +387,7 @@ def build_passport(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | No
     if not agent:
         return None
 
-    reputation = build_reputation(db, agent_id)
-    events = list_events(db, agent_id)
-    complaints = list_complaints(db, agent_id)
+    reputation, events, complaints = _build_reputation_context(db, agent)
     marketplace = build_marketplace_info(db, agent_id)
     return {
         "agent": agent,
@@ -467,30 +465,40 @@ def add_audit_log(db: sqlite3.Connection, agent_id: int | None, action: str, det
 
 def build_reputation(db: sqlite3.Connection, agent_id: int) -> dict[str, Any]:
     agent = get_agent_or_none(db, agent_id)
+    if not agent:
+        return calculate_reputation([], []).__dict__
+    reputation, _, _ = _build_reputation_context(db, agent)
+    return reputation
+
+
+def _build_reputation_context(
+    db: sqlite3.Connection,
+    agent: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    agent_id = agent["id"]
+    event_rows = list_events(db, agent_id)
+    complaint_rows = list_complaints(db, agent_id)
     events = [
         ReputationEvent(
-            outcome=row["outcome"],
-            value_usd=row["value_usd"],
-            created_at=row["created_at"],
-            category=row["category"],
-            tx_hash=row["tx_hash"],
+            outcome=event["outcome"],
+            value_usd=event["value_usd"],
+            created_at=event["created_at"],
+            category=event["category"],
+            tx_hash=event["tx_hash"],
         )
-        for row in db.execute(
-            "SELECT outcome, value_usd, created_at, category, tx_hash FROM agent_events WHERE agent_id = ?",
-            (agent_id,),
-        )
+        for event in event_rows
     ]
     complaints = [
-        ReputationComplaint(severity=row["severity"], status=row["status"])
-        for row in db.execute("SELECT severity, status FROM complaints WHERE agent_id = ?", (agent_id,))
+        ReputationComplaint(severity=complaint["severity"], status=complaint["status"])
+        for complaint in complaint_rows
     ]
-    wallet_verified = _wallet_is_verified(db, agent["owner_wallet"], agent["chain_id"]) if agent else False
-    return calculate_reputation(
+    reputation = calculate_reputation(
         events,
         complaints,
-        agent_created_at=agent["created_at"] if agent else None,
-        wallet_verified=wallet_verified,
+        agent_created_at=agent["created_at"],
+        wallet_verified=_wallet_is_verified(db, agent["owner_wallet"], agent["chain_id"]),
     ).__dict__
+    return reputation, event_rows, complaint_rows
 
 
 def _event_from_row(row: sqlite3.Row) -> dict[str, Any]:
@@ -531,3 +539,7 @@ def _wallet_is_verified(db: sqlite3.Connection, wallet_address: str, chain_id: i
         (wallet_address, chain_id),
     ).fetchone()
     return row is not None
+
+
+def _row_int(row: sqlite3.Row, key: str) -> int:
+    return int(row[key] or 0)

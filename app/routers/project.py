@@ -25,11 +25,7 @@ def get_hackathon_alignment(db: sqlite3.Connection = Depends(get_db)) -> Hackath
         metric: _count(db, table)
         for metric, table in METRIC_TABLES.items()
     }
-    metrics.update(
-        {
-        "verified_wallets": _count_verified_wallets(db),
-        }
-    )
+    metrics["verified_wallets"] = _count_verified_wallets(db)
     return build_hackathon_alignment_report(metrics)
 
 
