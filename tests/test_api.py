@@ -91,6 +91,14 @@ def test_agent_passport_flow() -> None:
         assert project_mantle_response.status_code == 200
         project_mantle = project_mantle_response.json()
         assert project_mantle["agent_count"] == 1
+        assert set(project_mantle["grade_distribution"]) == {
+            "excellent",
+            "good",
+            "average",
+            "below_average",
+            "weak",
+        }
+        assert set(project_mantle["risk_distribution"]) == {"Low", "Medium", "High", "unknown"}
         assert project_mantle["recommended_demo_flow"]
 
         list_response = client.get("/agents")
@@ -117,7 +125,7 @@ def test_agent_passport_flow() -> None:
         seeded_project = seeded_project_mantle_response.json()
         assert seeded_project["agent_count"] == 3
         assert seeded_project["top_agent"]
-        assert set(seeded_project["risk_distribution"]) >= {"Low", "Medium", "High"}
+        assert set(seeded_project["risk_distribution"]) == {"Low", "Medium", "High", "unknown"}
 
 
         marketplace_response = client.get("/marketplace/listings")
@@ -177,6 +185,37 @@ def test_agent_passport_flow() -> None:
         )
         assert dispute_response.status_code == 200
         assert dispute_response.json()["status"] == "disputed"
+    finally:
+        app.dependency_overrides.clear()
+        db.close()
+
+
+def test_project_mantle_readiness_empty_state_has_stable_shape() -> None:
+    db = connect(":memory:")
+    init_db(db)
+
+    def override_db() -> Iterator:
+        yield db
+
+    app.dependency_overrides[get_db] = override_db
+    client = TestClient(app)
+    try:
+        response = client.get("/mantle/readiness")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["agent_count"] == 0
+        assert body["grade"] == "weak"
+        assert body["grade_distribution"] == {
+            "excellent": 0,
+            "good": 0,
+            "average": 0,
+            "below_average": 0,
+            "weak": 0,
+        }
+        assert body["risk_distribution"] == {"Low": 0, "Medium": 0, "High": 0, "unknown": 0}
+        assert body["top_agent"] is None
+        assert body["recommended_demo_flow"]
     finally:
         app.dependency_overrides.clear()
         db.close()

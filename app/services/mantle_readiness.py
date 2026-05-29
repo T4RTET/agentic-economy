@@ -4,6 +4,16 @@ from typing import Any
 
 
 MANTLE_CHAIN_IDS = {5000, 5001}
+GRADE_ORDER = ("excellent", "good", "average", "below_average", "weak")
+RISK_LEVELS = ("Low", "Medium", "High", "unknown")
+RECOMMENDED_DEMO_FLOW = [
+    "POST /auth/nonce",
+    "POST /auth/verify",
+    "GET /agents/{agent_id}/passport",
+    "GET /agents/{agent_id}/intelligence",
+    "GET /mantle/agents/{agent_id}/readiness",
+    "GET /mantle/readiness",
+]
 CRITERION_WEIGHTS = {
     "technical": 30,
     "ecosystem_fit": 20,
@@ -40,8 +50,8 @@ def build_project_mantle_readiness_report(passports: list[dict[str, Any]]) -> di
             "summary": "Mantle readiness score 0/100 (weak): no agent passports are available.",
             "agent_count": 0,
             "average_agent_score": 0.0,
-            "grade_distribution": {},
-            "risk_distribution": {},
+            "grade_distribution": _empty_counts(GRADE_ORDER),
+            "risk_distribution": _empty_counts(RISK_LEVELS),
             "top_agent": None,
             "judging_alignment": _empty_project_criteria(),
             "recommended_demo_flow": _recommended_demo_flow(),
@@ -62,7 +72,7 @@ def build_project_mantle_readiness_report(passports: list[dict[str, Any]]) -> di
         "summary": f"Project Mantle readiness score {project_score}/100 ({grade}) across {len(passports)} agent passport(s).",
         "agent_count": len(passports),
         "average_agent_score": average_agent_score,
-        "grade_distribution": _count_by(reports, "grade"),
+        "grade_distribution": _count_by(reports, "grade", GRADE_ORDER),
         "risk_distribution": _risk_distribution(passports),
         "top_agent": passports[best_index]["agent"],
         "judging_alignment": judging_alignment,
@@ -400,22 +410,15 @@ def _project_next_steps(
 
 
 def _recommended_demo_flow() -> list[str]:
-    return [
-        "POST /auth/nonce",
-        "POST /auth/verify",
-        "GET /agents/{agent_id}/passport",
-        "GET /agents/{agent_id}/intelligence",
-        "GET /mantle/agents/{agent_id}/readiness",
-        "GET /mantle/readiness",
-    ]
+    return list(RECOMMENDED_DEMO_FLOW)
 
 
 def _criteria_average(criteria: list[dict[str, Any]]) -> float:
     return round(sum(float(item["weighted_score"]) for item in criteria), 2)
 
 
-def _count_by(items: list[dict[str, Any]], key: str) -> dict[str, int]:
-    counts: dict[str, int] = {}
+def _count_by(items: list[dict[str, Any]], key: str, known_values: tuple[str, ...]) -> dict[str, int]:
+    counts = _empty_counts(known_values)
     for item in items:
         value = str(item.get(key, "unknown"))
         counts[value] = counts.get(value, 0) + 1
@@ -423,11 +426,15 @@ def _count_by(items: list[dict[str, Any]], key: str) -> dict[str, int]:
 
 
 def _risk_distribution(passports: list[dict[str, Any]]) -> dict[str, int]:
-    counts: dict[str, int] = {}
+    counts = _empty_counts(RISK_LEVELS)
     for passport in passports:
         risk = str(passport.get("reputation", {}).get("risk_level", "unknown"))
         counts[risk] = counts.get(risk, 0) + 1
     return counts
+
+
+def _empty_counts(values: tuple[str, ...]) -> dict[str, int]:
+    return {value: 0 for value in values}
 
 
 def _criterion_label(criterion_id: str) -> str:

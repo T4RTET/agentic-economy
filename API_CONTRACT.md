@@ -350,6 +350,7 @@ The final score is risk-adjusted: high-risk agents cannot receive an excellent r
 ### `GET /mantle/readiness`
 
 Returns a project-level judging summary across all agent passports in the backend demo.
+`grade_distribution` and `risk_distribution` always include all known keys, even when a count is `0`, so frontend charts can render without defensive remapping.
 
 ```json
 {
