@@ -152,6 +152,21 @@ def test_agent_passport_flow() -> None:
         )
         assert dispute_response.status_code == 200
         assert dispute_response.json()["status"] == "disputed"
+
+        alignment_response = client.get("/project/hackathon-alignment")
+        assert alignment_response.status_code == 200
+        alignment = alignment_response.json()
+        assert alignment["project_name"] == "Agent Reputation Passport"
+        assert len(alignment["judging_criteria"]) == 5
+        assert {item["criterion"] for item in alignment["judging_criteria"]} == {
+            "technical",
+            "ecosystem_fit",
+            "business_potential",
+            "innovation",
+            "user_experience",
+        }
+        assert alignment["backend_demo_metrics"]["agents"] == 3
+        assert alignment["non_goals"]
     finally:
         app.dependency_overrides.clear()
         db.close()

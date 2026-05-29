@@ -10,6 +10,7 @@ from app.routers.auth import router as auth_router
 from app.routers.demo import router as demo_router
 from app.routers.intelligence import router as intelligence_router
 from app.routers.marketplace import router as marketplace_router
+from app.routers.project import router as project_router
 from app.routers.wallet import router as wallet_router
 
 
@@ -47,3 +48,4 @@ app.include_router(demo_router)
 app.include_router(marketplace_router)
 app.include_router(intelligence_router)
 app.include_router(automation_router)
+app.include_router(project_router)

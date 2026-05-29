@@ -32,6 +32,22 @@ Swagger/OpenAPI:
 http://127.0.0.1:8000/docs
 ```
 
+## Hackathon Project Alignment
+
+This endpoint maps the whole project to the official Mantle judging criteria. It is not used in agent Trust Score calculation.
+
+```http
+GET /project/hackathon-alignment
+```
+
+Response includes:
+
+- project positioning;
+- recommended demo story;
+- criteria alignment for technical quality, Mantle ecosystem fit, business potential, innovation, and UX;
+- backend demo metrics;
+- explicit non-goals, including that hackathon judging criteria are not agent scoring criteria.
+
 ## Secure MetaMask Flow
 
 1. Frontend connects MetaMask and reads the selected wallet address.

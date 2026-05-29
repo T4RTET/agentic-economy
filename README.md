@@ -32,6 +32,7 @@ http://127.0.0.1:8000/docs
 ## API
 
 - `GET /health`
+- `GET /project/hackathon-alignment`
 - `POST /auth/nonce`
 - `POST /auth/verify`
 - `POST /wallet/connect`

@@ -17,6 +17,13 @@ RiskAssessmentConfidence = Literal["low", "medium", "high"]
 AutomationMode = Literal["manual", "semi_auto", "full_auto"]
 DelegationStatus = Literal["none", "requested", "active", "revoked", "expired"]
 AutomationAttemptStatus = Literal["prepared", "requires_confirmation", "delegation_required", "executed", "rejected", "failed"]
+HackathonCriterionId = Literal[
+    "technical",
+    "ecosystem_fit",
+    "business_potential",
+    "innovation",
+    "user_experience",
+]
 
 
 class AgentCreate(BaseModel):
@@ -376,6 +383,26 @@ class AgentIntelligenceReport(BaseModel):
 class DemoResetResponse(BaseModel):
     status: Literal["reset"]
     agents_seeded: int
+
+
+class HackathonCriterionAlignment(BaseModel):
+    criterion: HackathonCriterionId
+    label: str
+    weight_percent: int
+    project_evidence: list[str]
+    backend_features: list[str]
+    demo_endpoints: list[str]
+    improvement_notes: list[str]
+
+
+class HackathonAlignmentReport(BaseModel):
+    project_name: str
+    track_fit: str
+    positioning: str
+    demo_story: list[str]
+    judging_criteria: list[HackathonCriterionAlignment]
+    backend_demo_metrics: dict[str, int]
+    non_goals: list[str]
 
 
 def _normalize_address(value: str) -> str:
