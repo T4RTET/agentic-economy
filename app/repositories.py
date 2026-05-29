@@ -15,6 +15,7 @@ from app.schemas import (
     RentalCreate,
     WalletConnect,
 )
+from app.services.mantle_readiness import build_mantle_readiness_report
 
 
 def create_agent(db: sqlite3.Connection, payload: AgentCreate) -> dict[str, Any]:
@@ -391,7 +392,7 @@ def build_passport(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | No
     events = list_events(db, agent_id)
     complaints = list_complaints(db, agent_id)
     marketplace = build_marketplace_info(db, agent_id)
-    return {
+    passport = {
         "agent": agent,
         "reputation": reputation,
         "marketplace": marketplace,
@@ -400,6 +401,8 @@ def build_passport(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | No
         "complaints": complaints,
         "audit_log": list_audit_log(db, agent_id),
     }
+    passport["mantle_readiness"] = build_mantle_readiness_report(passport)
+    return passport
 
 
 def build_passport_analysis(

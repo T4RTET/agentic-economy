@@ -71,9 +71,21 @@ def test_agent_passport_flow() -> None:
         assert passport["agent"]["name"] == "Demo Agent"
         assert passport["marketplace"]["listing"] is None
         assert passport["analysis"]["recommendation"]
+        assert passport["mantle_readiness"]["overall_score"] > 0
+        assert {item["criterion"] for item in passport["mantle_readiness"]["criteria"]} == {
+            "technical",
+            "ecosystem_fit",
+            "business_potential",
+            "innovation",
+            "user_experience",
+        }
         assert passport["actions_history"][0]["metadata"]["counterparty"] == "demo"
         assert passport["reputation"]["trust_score"] >= 50
         assert passport["reputation"]["risk_level"] in ["Low", "Medium", "High"]
+
+        mantle_response = client.get(f"/mantle/agents/{agent_id}/readiness")
+        assert mantle_response.status_code == 200
+        assert mantle_response.json()["summary"].startswith("Mantle readiness score")
 
         list_response = client.get("/agents")
         assert list_response.status_code == 200
