@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Agent MetaMask Automation Test</title>
+    <style>
+      :root {
+        color: #172019;
+        background: #f5f7f2;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        min-height: 100vh;
+        background: #f5f7f2;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        min-height: 40px;
+        padding: 9px 13px;
+        border: 1px solid #bac6b4;
+        border-radius: 7px;
+        background: #fff;
+        color: #172019;
+        cursor: pointer;
+      }
+
+      button:hover:not(:disabled) {
+        border-color: #24553c;
+        background: #f1f8f0;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      button.primary,
+      button.selected {
+        border-color: #24553c;
+        background: #24553c;
+        color: #fff;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        min-height: 40px;
+        padding: 9px 11px;
+        border: 1px solid #bdc9bd;
+        border-radius: 7px;
+        background: #fff;
+        color: #172019;
+      }
+
+      textarea {
+        min-height: 74px;
+        resize: vertical;
+      }
+
+      label {
+        display: grid;
+        gap: 7px;
+        color: #415043;
+        font-size: 0.9rem;
+        font-weight: 650;
+      }
+
+      pre {
+        overflow: auto;
+        max-height: 340px;
+        padding: 14px;
+        border: 1px solid #d8dfd5;
+        border-radius: 7px;
+        background: #101612;
+        color: #eaf5ea;
+      }
+
+      .app-shell {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 26px 0 20px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: #2f6f4e;
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 12px;
+        font-size: clamp(2rem, 4vw, 4rem);
+        line-height: 1;
+      }
+
+      h2 {
+        margin-bottom: 16px;
+        color: #203026;
+        font-size: 1rem;
+      }
+
+      .lead {
+        max-width: 760px;
+        color: #55645b;
+        font-size: 1.05rem;
+      }
+
+      .header-actions,
+      .button-row,
+      .preset-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .header-actions {
+        justify-content: flex-end;
+        min-width: 280px;
+      }
+
+      .status-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .status-pill,
+      .wallet-pill,
+      .error-text,
+      .alert,
+      .hint {
+        border-radius: 7px;
+        padding: 9px 11px;
+      }
+
+      .status-pill {
+        background: #e8f2e6;
+        color: #24553c;
+        font-weight: 750;
+      }
+
+      .wallet-pill {
+        overflow-wrap: anywhere;
+        background: #eef1ea;
+        color: #4a574d;
+        font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      }
+
+      .error-text {
+        background: #fff0ed;
+        color: #9c2f20;
+        font-weight: 700;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .panel {
+        padding: 18px;
+        border: 1px solid #d9e0d5;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 12px 26px rgba(27, 45, 31, 0.06);
+      }
+
+      .panel.wide {
+        grid-column: 1 / -1;
+      }
+
+      .facts {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+      }
+
+      .facts.compact {
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      }
+
+      .facts div {
+        display: grid;
+        gap: 3px;
+      }
+
+      .facts dt {
+        color: #66746a;
+        font-size: 0.76rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .facts dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .hint {
+        color: #66746a;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin: 14px 0;
+      }
+
+      .check-row {
+        align-content: start;
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        min-height: 40px;
+      }
+
+      .check-row input {
+        width: auto;
+        min-height: auto;
+        margin-top: 4px;
+      }
+
+      .setup-summary {
+        margin-bottom: 14px;
+        padding: 14px;
+        border: 1px solid #d8dfd5;
+        border-radius: 8px;
+        background: #f8faf5;
+      }
+
+      .decision {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        margin-bottom: 12px;
+        padding: 6px 11px;
+        border-radius: 7px;
+        color: #fff;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .decision.allow {
+        background: #207645;
+      }
+
+      .decision.limit {
+        background: #9a6717;
+      }
+
+      .decision.deny,
+      .decision.none {
+        background: #a33225;
+      }
+
+      .alert {
+        margin: 14px 0 0;
+        background: #fff8e5;
+        color: #6e5012;
+      }
+
+      .alert.ok {
+        background: #e7f4ea;
+        color: #1e6a3c;
+      }
+
+      .evaluation {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+        padding: 14px;
+        border: 1px solid #d8dfd5;
+        border-radius: 8px;
+        background: #f8faf5;
+      }
+
+      .json-block {
+        margin-top: 14px;
+      }
+
+      .json-block summary {
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      @media (max-width: 920px) {
+        .topbar {
+          display: grid;
+        }
+
+        .header-actions {
+          justify-content: flex-start;
+        }
+
+        .workspace,
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Agentic Economy</p>
+          <h1>AI-агент с MetaMask Automation</h1>
+          <p class="lead">Локальная страница проверки: подключение MetaMask, Verify Wallet, Create Smart Wallet, Enable Automation, test delegation и запуск действия через policy engine.</p>
+        </div>
+        <div class="header-actions">
+          <button id="checkBackend">Check Backend</button>
+          <button id="connectWallet">Connect MetaMask</button>
+          <button id="verifyWallet" class="primary">Verify Wallet</button>
+        </div>
+      </header>
+
+      <section class="status-row" aria-live="polite">
+        <span id="status" class="status-pill">Готово</span>
+        <span class="wallet-pill">Backend: <span id="backendUrl"></span></span>
+        <span id="walletPill" class="wallet-pill hidden"></span>
+        <span id="error" class="error-text hidden"></span>
+      </section>
+
+      <section class="workspace">
+        <article class="panel">
+          <h2>MetaMask</h2>
+          <dl class="facts">
+            <div><dt>Кошелёк</dt><dd id="walletAddress">Не подключён</dd></div>
+            <div><dt>Chain ID</dt><dd id="chainId">Unknown</dd></div>
+            <div><dt>Smart Account SDK</dt><dd id="sdkStatus">не подключён</dd></div>
+          </dl>
+          <p class="hint">Seed phrase и private key здесь не нужны и никогда не отправляются в backend.</p>
+        </article>
+
+        <article class="panel">
+          <h2>Паспорт агента</h2>
+          <dl class="facts">
+            <div><dt>Agent ID</dt><dd id="agentId">-</dd></div>
+            <div><dt>Имя</dt><dd id="agentName">-</dd></div>
+            <div><dt>Owner wallet</dt><dd id="ownerWallet">-</dd></div>
+            <div><dt>Trust score</dt><dd id="trustScore">-</dd></div>
+            <div><dt>Risk</dt><dd id="riskLevel">-</dd></div>
+          </dl>
+        </article>
+
+        <article class="panel">
+          <h2>Intelligence</h2>
+          <div id="decision" class="decision none">none</div>
+          <p id="summary">Intelligence появится после Verify Wallet.</p>
+          <p id="decisionReason"></p>
+          <dl class="facts compact">
+            <div><dt>Лимит</dt><dd id="walletLimit">-</dd></div>
+            <div><dt>Можно арендовать</dt><dd id="canRent">-</dd></div>
+          </dl>
+        </article>
+
+        <article id="automationPanel" class="panel wide hidden">
+          <h2>Smart Account Automation</h2>
+          <div class="setup-summary">
+            <dl class="facts compact">
+              <div><dt>Agent ID</dt><dd id="autoAgentId">-</dd></div>
+              <div><dt>Wallet</dt><dd id="autoWallet">-</dd></div>
+              <div><dt>Automation</dt><dd id="automationStatus">off</dd></div>
+              <div><dt>Delegation</dt><dd id="delegationStatus">none</dd></div>
+              <div><dt>Risk decision</dt><dd id="riskDecision">unknown</dd></div>
+              <div><dt>Recommended limit</dt><dd id="recommendedLimit">-</dd></div>
+            </dl>
+          </div>
+
+          <div class="preset-row" role="group" aria-label="Automation presets">
+            <button id="presetSafe" class="selected">Safe</button>
+            <button id="presetBalanced">Balanced</button>
+            <button id="presetCustom">Custom</button>
+          </div>
+
+          <div class="form-grid">
+            <label class="check-row"><input id="automationEnabled" type="checkbox" checked /> automation_enabled</label>
+            <label>mode
+              <select id="mode">
+                <option value="manual">manual</option>
+                <option value="semi_auto" selected>semi_auto</option>
+                <option value="full_auto">full_auto</option>
+              </select>
+            </label>
+            <label>max_tx_value_usd<input id="maxTxValueUsd" value="1" /></label>
+            <label>daily_limit_usd<input id="dailyLimitUsd" value="5" /></label>
+            <label>max_transactions_per_hour<input id="maxTxPerHour" value="1" /></label>
+            <label>min_native_balance_wei<input id="minNativeBalanceWei" value="100000000000000000" /></label>
+            <label>require_confirmation_above_usd<input id="confirmAboveUsd" value="1" /></label>
+            <label class="check-row"><input id="emergencyStop" type="checkbox" /> emergency_stop</label>
+            <label>allowed_chain_ids<textarea id="allowedChainIds">5000</textarea></label>
+            <label>allowed_tokens<textarea id="allowedTokens">NATIVE</textarea></label>
+            <label>allowed_recipients<textarea id="allowedRecipients">0x000000000000000000000000000000000000dEaD</textarea></label>
+            <label>allowed_actions<textarea id="allowedActions">native_transfer</textarea></label>
+          </div>
+
+          <div class="button-row">
+            <button id="loadPolicy">Load Policy</button>
+            <button id="createSmartWallet" class="primary">Create Smart Wallet</button>
+            <button id="enableAutomation">Enable Automation</button>
+            <button id="confirmTestDelegation">Confirm Test Delegation (test-only)</button>
+          </div>
+
+          <p id="automationNotice" class="alert">Для полной автоматизации нужен MetaMask Smart Account / Delegation. Обычный MetaMask EOA не может автоматически подтверждать транзакции.</p>
+          <p id="smartAccountMessage" class="hint"></p>
+          <details id="delegationDetails" class="json-block hidden">
+            <summary>Delegation request</summary>
+            <pre id="delegationJson">{}</pre>
+          </details>
+        </article>
+
+        <article id="actionPanel" class="panel wide hidden">
+          <h2>Smart Wallet Action Test</h2>
+          <div class="form-grid">
+            <label>action_type<input id="actionType" value="native_transfer" /></label>
+            <label>recipient address<input id="recipient" value="0x000000000000000000000000000000000000dEaD" /></label>
+            <label>token<input id="token" placeholder="пусто для NATIVE" /></label>
+            <label>value_wei<input id="valueWei" value="1000000000000000" /></label>
+            <label>value_usd<input id="valueUsd" value="1" /></label>
+            <label>chain_id<input id="actionChainId" value="5000" /></label>
+            <label>reason<input id="reason" value="Локальный тест автоматического действия" /></label>
+          </div>
+
+          <div class="button-row">
+            <button id="evaluateAction">Evaluate Action</button>
+            <button id="runAutomatedAction" class="primary">Run Automated Action</button>
+            <button id="sendWithMetaMask" class="hidden">Send with MetaMask</button>
+          </div>
+
+          <div id="evaluationBox" class="evaluation hidden"></div>
+          <p id="txHash" class="alert ok hidden"></p>
+          <details id="automatedDetails" class="json-block hidden">
+            <summary>Automated response</summary>
+            <pre id="automatedJson">{}</pre>
+          </details>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const API_BASE = "http://127.0.0.1:8000";
+      const DEFAULT_CHAIN_ID = 5000;
+      const DEFAULT_RECIPIENT = "0x000000000000000000000000000000000000dEaD";
+
+      let wallet = "";
+      let chainId = DEFAULT_CHAIN_ID;
+      let passport = null;
+      let intelligence = null;
+      let policy = null;
+      let delegationRequest = null;
+      let automatedResult = null;
+      let smartAccountAddress = "";
+
+      const $ = (id) => document.getElementById(id);
+
+      $("backendUrl").textContent = API_BASE;
+      $("sdkStatus").textContent = window.ethereumSmartAccounts ? "доступен" : "не подключён";
+
+      function setStatus(message) {
+        $("status").textContent = message;
+      }
+
+      function setError(message) {
+        $("error").textContent = message;
+        $("error").classList.toggle("hidden", !message);
+      }
+
+      function shortAddress(address) {
+        return address && address.length > 12 ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
+      }
+
+      function splitList(value) {
+        return value.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+      }
+
+      function formatUsd(value) {
+        return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value || 0);
+      }
+
+      function readableError(error) {
+        const message = error && error.message ? error.message : String(error);
+        const lower = message.toLowerCase();
+        if (error && error.code === 4001 || lower.includes("user rejected") || lower.includes("rejected")) return "Пользователь отклонил запрос в MetaMask.";
+        if (lower.includes("failed to fetch")) return "Backend недоступен. Запустите uvicorn app.main:app --reload.";
+        if (lower.includes("insufficient funds")) return "Недостаточно средств для газа или суммы транзакции.";
+        return message;
+      }
+
+      async function run(label, action) {
+        setStatus(label);
+        setError("");
+        try {
+          await action();
+        } catch (error) {
+          setError(readableError(error));
+        }
+      }
+
+      async function parseResponse(response) {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Запрос к backend завершился ошибкой");
+        return data;
+      }
+
+      async function getJson(path) {
+        return parseResponse(await fetch(`${API_BASE}${path}`));
+      }
+
+      async function postJson(path, body) {
+        return parseResponse(await fetch(`${API_BASE}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }));
+      }
+
+      async function putJson(path, body) {
+        return parseResponse(await fetch(`${API_BASE}${path}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }));
+      }
+
+      function requireAgentId() {
+        if (!passport || !passport.agent || !passport.agent.id) throw new Error("Сначала подтвердите кошелёк и привяжите агента.");
+        return passport.agent.id;
+      }
+
+      function buildPolicyPayload() {
+        return {
+          automation_enabled: $("automationEnabled").checked,
+          mode: $("mode").value,
+          max_tx_value_usd: Number($("maxTxValueUsd").value),
+          daily_limit_usd: Number($("dailyLimitUsd").value),
+          max_transactions_per_hour: Number($("maxTxPerHour").value),
+          min_native_balance_wei: $("minNativeBalanceWei").value,
+          require_confirmation_above_usd: Number($("confirmAboveUsd").value),
+          allowed_chain_ids: splitList($("allowedChainIds").value).map(Number).filter(Number.isFinite),
+          allowed_tokens: splitList($("allowedTokens").value),
+          allowed_recipients: splitList($("allowedRecipients").value),
+          allowed_actions: splitList($("allowedActions").value),
+          emergency_stop: $("emergencyStop").checked,
+        };
+      }
+
+      function buildActionPayload() {
+        return {
+          action_type: $("actionType").value,
+          to_address: $("recipient").value,
+          token_address: $("token").value || null,
+          value_wei: $("valueWei").value,
+          value_usd: Number($("valueUsd").value),
+          chain_id: Number($("actionChainId").value),
+          reason: $("reason").value,
+          metadata: { source: "local_static_automation_test" },
+        };
+      }
+
+      function applyPolicyToForm(nextPolicy) {
+        $("automationEnabled").checked = nextPolicy.automation_enabled;
+        $("mode").value = nextPolicy.mode;
+        $("maxTxValueUsd").value = nextPolicy.max_tx_value_usd;
+        $("dailyLimitUsd").value = nextPolicy.daily_limit_usd;
+        $("maxTxPerHour").value = nextPolicy.max_transactions_per_hour;
+        $("minNativeBalanceWei").value = nextPolicy.min_native_balance_wei;
+        $("confirmAboveUsd").value = nextPolicy.require_confirmation_above_usd;
+        $("allowedChainIds").value = nextPolicy.allowed_chain_ids.join(", ");
+        $("allowedTokens").value = nextPolicy.allowed_tokens.join(", ");
+        $("allowedRecipients").value = nextPolicy.allowed_recipients.join(", ");
+        $("allowedActions").value = nextPolicy.allowed_actions.join(", ");
+        $("emergencyStop").checked = nextPolicy.emergency_stop;
+      }
+
+      function updatePassport() {
+        $("agentId").textContent = passport ? passport.agent.id : "-";
+        $("agentName").textContent = passport ? passport.agent.name : "-";
+        $("ownerWallet").textContent = passport ? passport.agent.owner_wallet : "-";
+        $("trustScore").textContent = passport ? `${passport.reputation.trust_score}/100` : "-";
+        $("riskLevel").textContent = passport ? passport.reputation.risk_level : "-";
+        $("automationPanel").classList.toggle("hidden", !passport);
+        $("actionPanel").classList.toggle("hidden", !passport);
+      }
+
+      function updateIntelligence() {
+        const decision = intelligence ? intelligence.wallet_permission.decision : "none";
+        $("decision").textContent = decision;
+        $("decision").className = `decision ${decision}`;
+        $("summary").textContent = intelligence ? intelligence.summary : "Intelligence появится после Verify Wallet.";
+        $("decisionReason").textContent = intelligence ? intelligence.wallet_permission.reason : "";
+        $("walletLimit").textContent = intelligence ? formatUsd(intelligence.wallet_permission.recommended_limit_usd) : "-";
+        $("canRent").textContent = intelligence ? (intelligence.marketplace_verdict.can_be_rented ? "да" : "нет") : "-";
+      }
+
+      function updateAutomationStatus() {
+        const active = policy && policy.automation_enabled && policy.delegation_status === "active";
+        $("autoAgentId").textContent = passport ? passport.agent.id : "-";
+        $("autoWallet").textContent = wallet || "-";
+        $("automationStatus").textContent = active ? "Automation Enabled" : policy && policy.automation_enabled ? "policy saved" : "off";
+        $("delegationStatus").textContent = policy ? policy.delegation_status : "none";
+        $("riskDecision").textContent = intelligence ? intelligence.wallet_permission.decision : "unknown";
+        $("recommendedLimit").textContent = intelligence ? formatUsd(intelligence.wallet_permission.recommended_limit_usd) : "-";
+        $("automationNotice").textContent = active
+          ? "Automation Enabled: delegation active, действия всё равно проходят через policy engine и лимиты."
+          : "Для полной автоматизации нужен MetaMask Smart Account / Delegation. Обычный MetaMask EOA не может автоматически подтверждать транзакции.";
+        $("automationNotice").className = active ? "alert ok" : "alert";
+      }
+
+      function applyPreset(name) {
+        $("presetSafe").classList.toggle("selected", name === "safe");
+        $("presetBalanced").classList.toggle("selected", name === "balanced");
+        $("presetCustom").classList.toggle("selected", name === "custom");
+        if (name === "custom") return;
+        const safe = name === "safe";
+        $("automationEnabled").checked = true;
+        $("mode").value = "semi_auto";
+        $("maxTxValueUsd").value = safe ? "1" : "5";
+        $("dailyLimitUsd").value = safe ? "5" : "20";
+        $("maxTxPerHour").value = safe ? "1" : "3";
+        $("minNativeBalanceWei").value = "100000000000000000";
+        $("confirmAboveUsd").value = safe ? "1" : "5";
+        $("allowedChainIds").value = String(chainId);
+        $("allowedTokens").value = "NATIVE";
+        $("allowedRecipients").value = $("recipient").value || DEFAULT_RECIPIENT;
+        $("allowedActions").value = "native_transfer";
+        $("emergencyStop").checked = false;
+      }
+
+      $("checkBackend").onclick = () => run("Проверяю backend", async () => {
+        const health = await getJson("/health");
+        setStatus(`Backend: ${health.status}`);
+      });
+
+      $("connectWallet").onclick = () => run("Подключаю MetaMask", async () => {
+        if (!window.ethereum) throw new Error("MetaMask не установлен. Установите расширение браузера.");
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const chainHex = await window.ethereum.request({ method: "eth_chainId" });
+        wallet = accounts[0] || "";
+        chainId = parseInt(chainHex, 16);
+        $("walletAddress").textContent = wallet;
+        $("chainId").textContent = chainId;
+        $("walletPill").textContent = shortAddress(wallet);
+        $("walletPill").classList.remove("hidden");
+        $("allowedChainIds").value = String(chainId);
+        $("actionChainId").value = String(chainId);
+        setStatus("MetaMask подключён");
+      });
+
+      $("verifyWallet").onclick = () => run("Проверяю владение кошельком", async () => {
+        if (!window.ethereum) throw new Error("MetaMask не установлен.");
+        if (!wallet) throw new Error("Сначала подключите MetaMask.");
+        const nonce = await postJson("/auth/nonce", { wallet_address: wallet, chain_id: chainId });
+        const signature = await window.ethereum.request({ method: "personal_sign", params: [nonce.message, wallet] });
+        const verified = await postJson("/auth/verify", {
+          wallet_address: wallet,
+          chain_id: chainId,
+          message: nonce.message,
+          signature,
+          agent_name: "My MetaMask Test Agent",
+          agent_type: "wallet-linked-agent",
+        });
+        passport = verified.passport;
+        intelligence = await getJson(`/agents/${passport.agent.id}/intelligence`);
+        policy = await getJson(`/agents/${passport.agent.id}/automation-policy`);
+        applyPolicyToForm(policy);
+        updatePassport();
+        updateIntelligence();
+        updateAutomationStatus();
+        setStatus("Кошелёк подтверждён, агент привязан");
+      });
+
+      $("loadPolicy").onclick = () => run("Загружаю policy", async () => {
+        const id = requireAgentId();
+        policy = await getJson(`/agents/${id}/automation-policy`);
+        applyPolicyToForm(policy);
+        updateAutomationStatus();
+        setStatus("Policy загружена");
+      });
+
+      $("createSmartWallet").onclick = () => run("Создаю Smart Wallet", async () => {
+        const id = requireAgentId();
+        if (!wallet) throw new Error("Сначала подключите MetaMask.");
+        if (intelligence && intelligence.wallet_permission.decision === "deny") throw new Error("Intelligence запрещает wallet-действия для этого агента.");
+        smartAccountAddress = "";
+        policy = await putJson(`/agents/${id}/automation-policy`, buildPolicyPayload());
+        updateAutomationStatus();
+        $("smartAccountMessage").textContent = "RPC URL and Bundler RPC URL are required to create a real Smart Account. Confirm Test Delegation доступен только для local backend/UI проверки.";
+        setStatus("Smart Wallet не создан: нужен реальный MetaMask Smart Accounts Kit + RPC/Bundler.");
+      });
+
+      $("enableAutomation").onclick = () => run("Включаю автоматизацию", async () => {
+        const id = requireAgentId();
+        if (!smartAccountAddress) throw new Error("Сначала создайте Smart Wallet или используйте Confirm Test Delegation для локальной проверки.");
+        if (intelligence && intelligence.wallet_permission.decision === "deny") throw new Error("Intelligence запрещает wallet-действия для этого агента.");
+        delegationRequest = await postJson(`/agents/${id}/automation/delegation/request`, {});
+        $("delegationJson").textContent = JSON.stringify(delegationRequest, null, 2);
+        $("delegationDetails").classList.remove("hidden");
+        $("smartAccountMessage").textContent = "MetaMask Smart Account delegation SDK is not connected yet.";
+        updateAutomationStatus();
+        setStatus("Delegation request подготовлен. Нужен реальный Smart Account SDK.");
+      });
+
+      $("confirmTestDelegation").onclick = () => run("Подтверждаю test delegation", async () => {
+        const id = requireAgentId();
+        if (!wallet) throw new Error("Сначала подключите MetaMask.");
+        if (!delegationRequest) delegationRequest = await postJson(`/agents/${id}/automation/delegation/request`, {});
+        const scope = delegationRequest.policy_scope;
+        const testSmartAccountAddress = smartAccountAddress || wallet;
+        policy = await postJson(`/agents/${id}/automation/delegation/confirm`, {
+          smart_account_address: testSmartAccountAddress,
+          delegation_id: `local-test-delegation-${id}`,
+          delegation_scope: scope,
+        });
+        smartAccountAddress = policy.smart_account_address || testSmartAccountAddress;
+        applyPolicyToForm(policy);
+        updateAutomationStatus();
+        setStatus("Test delegation active");
+      });
+
+      $("evaluateAction").onclick = () => run("Проверяю действие через policy engine", async () => {
+        const id = requireAgentId();
+        const result = await postJson(`/agents/${id}/automation-policy/evaluate`, buildActionPayload());
+        $("evaluationBox").classList.remove("hidden");
+        $("evaluationBox").innerHTML = `
+          <strong>${result.allowed ? "Разрешено" : "Заблокировано"}</strong>
+          <span>confirmation: ${result.requires_user_confirmation}</span>
+          <span>auto: ${result.can_auto_execute}</span>
+          <span>delegation_required: ${result.delegation_required}</span>
+          <p>${result.reason}</p>
+          ${result.violations.length ? `<ul>${result.violations.map((item) => `<li>${item}</li>`).join("")}</ul>` : ""}
+        `;
+        setStatus(result.reason);
+      });
+
+      $("runAutomatedAction").onclick = () => run("Запускаю автоматическое действие", async () => {
+        const id = requireAgentId();
+        automatedResult = await postJson(`/agents/${id}/transactions/execute-automated`, buildActionPayload());
+        $("automatedJson").textContent = JSON.stringify(automatedResult, null, 2);
+        $("automatedDetails").classList.remove("hidden");
+        $("sendWithMetaMask").classList.toggle("hidden", !automatedResult.requires_user_confirmation);
+        if (automatedResult.smart_account_execution_payload && !window.ethereumSmartAccounts) {
+          $("smartAccountMessage").textContent = "Smart Account SDK is not connected yet.";
+        }
+        setStatus(automatedResult.reason);
+      });
+
+      $("sendWithMetaMask").onclick = () => run("Отправляю через MetaMask", async () => {
+        if (!window.ethereum) throw new Error("MetaMask не установлен.");
+        if (!automatedResult || !automatedResult.transaction_request) throw new Error("Нет подготовленной транзакции для MetaMask.");
+        const txHash = await window.ethereum.request({
+          method: "eth_sendTransaction",
+          params: [automatedResult.transaction_request],
+        });
+        $("txHash").textContent = `txHash: ${txHash}`;
+        $("txHash").classList.remove("hidden");
+        setStatus("Транзакция отправлена через MetaMask");
+      });
+
+      $("presetSafe").onclick = () => applyPreset("safe");
+      $("presetBalanced").onclick = () => applyPreset("balanced");
+      $("presetCustom").onclick = () => applyPreset("custom");
+
+      if (window.ethereum && window.ethereum.on) {
+        window.ethereum.on("accountsChanged", (accounts) => {
+          wallet = accounts[0] || "";
+          $("walletAddress").textContent = wallet || "Не подключён";
+          $("walletPill").textContent = shortAddress(wallet);
+          $("walletPill").classList.toggle("hidden", !wallet);
+          passport = null;
+          intelligence = null;
+          policy = null;
+          updatePassport();
+          updateIntelligence();
+          updateAutomationStatus();
+        });
+        window.ethereum.on("chainChanged", (chainHex) => {
+          chainId = parseInt(chainHex, 16);
+          $("chainId").textContent = chainId;
+          $("allowedChainIds").value = String(chainId);
+          $("actionChainId").value = String(chainId);
+        });
+      }
+    </script>
+  </body>
+</html>
