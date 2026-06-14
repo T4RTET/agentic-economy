@@ -73,7 +73,8 @@ def _ecosystem_alignment() -> dict[str, Any]:
         "weight_percent": 20,
         "project_evidence": [
             "Agents are tied to EVM wallets and Mantle chain ids 5000/5001.",
-            "Agent events store tx_hash and DeFi/CeFi categories for Mantle explorer-ready history.",
+            "Mantle RPC verifies transaction receipts and explorer-ready evidence.",
+            "Verified wallet owners can import indexed Mantle transaction history without duplicates.",
             "Wallet permission limits directly support safer autonomous agent activity on Mantle.",
         ],
         "backend_features": [
@@ -88,8 +89,7 @@ def _ecosystem_alignment() -> dict[str, Any]:
             "POST /agents/{agent_id}/automation/evaluate",
         ],
         "improvement_notes": [
-            "Add live Mantle explorer links in frontend using stored tx_hash and chain_id.",
-            "Add read-only Mantle RPC validation for tx_hash evidence.",
+            "Add token-price enrichment so synced native-value transfers can include value_usd.",
         ],
     }
 

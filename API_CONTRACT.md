@@ -32,6 +32,18 @@ Swagger/OpenAPI:
 http://127.0.0.1:8000/docs
 ```
 
+## Mantle Network Integration
+
+```http
+GET /mantle/status
+POST /mantle/transactions/verify
+POST /mantle/agents/{agent_id}/sync
+```
+
+`/mantle/transactions/verify` reads transaction and receipt evidence directly from Mantle RPC.
+
+`/mantle/agents/{agent_id}/sync` requires a previously verified owner wallet and `ETHERSCAN_API_KEY`. It imports indexed wallet transactions, skips duplicate transaction hashes, records sync state, and returns the recalculated passport.
+
 ## Hackathon Project Alignment
 
 This endpoint maps the whole project to the official Mantle judging criteria. It is not used in agent Trust Score calculation.

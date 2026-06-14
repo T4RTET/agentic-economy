@@ -98,7 +98,9 @@ input, textarea, select { width: 100%; min-height: 42px; border: 1px solid var(-
 .card-link { width: 100%; border: 0; border-top: 1px solid var(--line); background: none; padding: 16px 0 0; margin-top: 20px; display: flex; justify-content: space-between; color: var(--green); font-size: 11px; font-weight: 800; }
 
 .passport-page { padding-top: 28px; }
+.passport-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .back { border: 0; background: none; padding: 0; color: var(--muted); font-size: 12px; margin-bottom: 24px; }
+.passport-actions .back { margin-bottom: 0; }
 .passport-hero { display: flex; justify-content: space-between; gap: 40px; padding: 38px; color: white; background: #163c2b; }
 .identity { display: flex; gap: 22px; align-items: flex-start; max-width: 720px; }
 .identity .agent-icon { background: white; color: var(--green); }
@@ -130,9 +132,20 @@ input, textarea, select { width: 100%; min-height: 42px; border: 1px solid var(-
 .event-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); }.event-dot.failed, .event-dot.error { background: var(--red); }
 .timeline-item > div { display: grid; gap: 4px; }.timeline-item strong { font-size: 12px; }.timeline-item span { color: var(--muted); font-size: 9px; }
 .event-value { text-align: right; }.event-value span.success { color: var(--green); }.event-value span.failed, .event-value span.error { color: var(--red); }
+.event-value a { color: var(--green); font: 500 8px "DM Mono"; text-decoration: none; }
 .key-metrics .stat { border-top: 1px solid var(--line); padding: 15px 0; }.key-metrics .stat strong { font-size: 20px; }
 .complaint { border-top: 1px solid var(--line); padding: 14px 0; }.complaint p { margin: 10px 0 6px; color: #4f5b53; font-size: 11px; line-height: 1.5; }.complaint > span { color: var(--muted); font-size: 8px; text-transform: uppercase; }
 .empty { color: var(--muted); font-size: 11px; }
+.compact-intro { min-height: 270px; grid-template-columns: 1fr; }
+.compact-intro h1 { max-width: 900px; }
+.capabilities { display: flex; flex-wrap: wrap; gap: 5px; min-height: 52px; margin: 18px 0; }
+.capabilities span { padding: 5px 7px; background: #edf3ee; color: var(--green); font: 500 8px "DM Mono"; }
+.listing-price { display: flex; justify-content: space-between; align-items: end; padding: 15px 0; border-top: 1px solid var(--line); }
+.listing-price span { color: var(--muted); font-size: 9px; text-transform: uppercase; }.listing-price strong { font-size: 22px; }
+.market-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.market-actions button { min-height: 38px; border: 1px solid var(--line); background: white; font-size: 11px; font-weight: 800; }
+.market-actions button.primary { background: var(--green); border-color: var(--green); color: white; }
+.market-actions button:disabled { opacity: .4; cursor: not-allowed; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(19,29,23,.72); }
 .modal { width: min(620px, 100%); max-height: 90vh; overflow: auto; position: relative; background: white; padding: 30px; }
@@ -149,7 +162,9 @@ input, textarea, select { width: 100%; min-height: 42px; border: 1px solid var(-
   .passport-layout { grid-template-columns: 1fr; }.passport-meta { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 700px) {
-  .nav { padding: 0 18px; gap: 12px; }.brand small, .nav nav, .icon-button { display: none; }
+  .nav { height: auto; min-height: 64px; padding: 8px 18px; gap: 10px; flex-wrap: wrap; }.brand small, .icon-button { display: none; }
+  .nav nav { display: flex; order: 3; width: 100%; height: 34px; gap: 18px; overflow-x: auto; }
+  .nav nav button { padding: 0; white-space: nowrap; }
   .notice, main { padding-left: 18px; padding-right: 18px; }
   .intro { grid-template-columns: 1fr; gap: 20px; padding: 50px 0; }.network-stats .stat:first-child { grid-row: auto; }
   .filters, .section-heading { display: grid; }.segments { overflow-x: auto; }.agent-grid, .score-factors, .signal-columns { grid-template-columns: 1fr; }

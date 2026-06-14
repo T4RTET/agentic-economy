@@ -51,6 +51,14 @@ def get_marketplace_rental(rental_id: int, db: sqlite3.Connection = Depends(get_
     return rental
 
 
+@router.get("/rentals", response_model=list[Rental])
+def get_marketplace_rentals(
+    renter_wallet: str | None = None,
+    db: sqlite3.Connection = Depends(get_db),
+) -> list[Rental]:
+    return repositories.list_rentals(db, renter_wallet)
+
+
 @router.post("/rentals/{rental_id}/complete", response_model=Rental)
 def post_rental_complete(rental_id: int, db: sqlite3.Connection = Depends(get_db)) -> Rental:
     rental = repositories.complete_rental(db, rental_id)
@@ -68,4 +76,12 @@ def post_rental_dispute(
     rental = repositories.dispute_rental(db, rental_id, payload.reason)
     if not rental:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rental not found")
+    return rental
+
+
+@router.post("/rentals/{rental_id}/cancel", response_model=Rental)
+def post_rental_cancel(rental_id: int, db: sqlite3.Connection = Depends(get_db)) -> Rental:
+    rental = repositories.cancel_rental(db, rental_id)
+    if not rental:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Rental cannot be cancelled")
     return rental

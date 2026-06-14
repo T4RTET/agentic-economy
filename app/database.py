@@ -1,10 +1,11 @@
 from collections.abc import Iterator
 from pathlib import Path
 import sqlite3
+import os
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATABASE_PATH = BASE_DIR / "agentic_economy.db"
+DATABASE_PATH = Path(os.getenv("DATABASE_PATH", BASE_DIR / "agentic_economy.db"))
 
 
 def connect(db_path: Path | str = DATABASE_PATH) -> sqlite3.Connection:
@@ -153,6 +154,18 @@ def init_db(connection: sqlite3.Connection | None = None) -> None:
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
             );
+
+            CREATE TABLE IF NOT EXISTS wallet_sync_state (
+                agent_id INTEGER PRIMARY KEY,
+                last_synced_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                imported_events INTEGER NOT NULL DEFAULT 0,
+                skipped_duplicates INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_events_tx_hash
+            ON agent_events(tx_hash)
+            WHERE tx_hash IS NOT NULL;
             """
         )
         db.commit()

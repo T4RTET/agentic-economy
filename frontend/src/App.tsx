@@ -45,9 +45,16 @@ type Passport = {
   analysis: { summary: string; strengths: string[]; risk_flags: string[]; recommendation: string };
   actions_history: Event[];
   complaints: Complaint[];
+  sync_state?: { last_synced_at: string; imported_events: number; skipped_duplicates: number } | null;
 };
 type AgentSummary = { agent: Agent; reputation: Reputation };
-type View = "catalog" | "passport";
+type MarketplaceCard = AgentSummary & {
+  marketplace: {
+    listing: { id: number; pricing_model: string; price_usd: number; price_token: string; availability: string; capabilities: string[]; terms: string } | null;
+    stats: { rentals_count: number; completed_rentals: number; disputed_rentals: number; completion_rate: number };
+  };
+};
+type View = "catalog" | "marketplace" | "passport";
 
 declare global {
   interface Window {
@@ -57,6 +64,7 @@ declare global {
 
 export default function App() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [listings, setListings] = useState<MarketplaceCard[]>([]);
   const [passport, setPassport] = useState<Passport | null>(null);
   const [view, setView] = useState<View>("catalog");
   const [query, setQuery] = useState("");
@@ -75,7 +83,7 @@ export default function App() {
   }, [agents, query, riskFilter]);
 
   useEffect(() => {
-    void loadAgents();
+    void Promise.all([loadAgents(), loadMarketplace()]);
   }, []);
 
   async function execute(label: string, action: () => Promise<void>) {
@@ -98,6 +106,11 @@ export default function App() {
     });
   }
 
+  async function loadMarketplace() {
+    const data = await api<MarketplaceCard[]>("/marketplace/listings");
+    setListings(data);
+  }
+
   async function openPassport(id: number) {
     await execute("Building agent passport...", async () => {
       const data = await api<Passport>(`/agents/${id}/passport`);
@@ -109,21 +122,59 @@ export default function App() {
   }
 
   async function connectWallet() {
-    await execute("Connecting wallet...", async () => {
+    await execute("Verifying wallet ownership...", async () => {
       if (!window.ethereum) throw new Error("MetaMask is not installed. You can still explore demo passports.");
       const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
       const address = accounts[0];
       if (!address) throw new Error("No wallet selected.");
       setWallet(address);
-      try {
-        const existing = await api<Passport>(`/wallet/${address}/passport?chain_id=${MANTLE_CHAIN_ID}`);
-        setPassport(existing);
-        setView("passport");
-        setNotice("Wallet-linked passport found");
-      } catch {
-        setNotice("Wallet connected. Create an agent passport to link it.");
-        setModal("agent");
-      }
+      const nonce = await api<{ message: string }>("/auth/nonce", {
+        method: "POST",
+        body: JSON.stringify({ wallet_address: address, chain_id: MANTLE_CHAIN_ID }),
+      });
+      const signature = await window.ethereum.request({ method: "personal_sign", params: [nonce.message, address] });
+      const verified = await api<{ passport: Passport }>("/auth/verify", {
+        method: "POST",
+        body: JSON.stringify({
+          wallet_address: address,
+          chain_id: MANTLE_CHAIN_ID,
+          message: nonce.message,
+          signature,
+          agent_name: `Mantle Agent ${shortAddress(address)}`,
+          agent_type: "wallet-linked-agent",
+        }),
+      });
+      setPassport(verified.passport);
+      setView("passport");
+      await loadAgents();
+      setNotice("Wallet ownership verified by signature");
+    });
+  }
+
+  async function syncMantle() {
+    if (!passport) return;
+    await execute("Syncing indexed Mantle history...", async () => {
+      const result = await api<{ passport: Passport; imported_events: number; skipped_duplicates: number }>(`/mantle/agents/${passport.agent.id}/sync`, { method: "POST" });
+      setPassport(result.passport);
+      await loadAgents();
+      setNotice(`Mantle sync complete: ${result.imported_events} imported, ${result.skipped_duplicates} already known`);
+    });
+  }
+
+  async function rentAgent(item: MarketplaceCard) {
+    if (!wallet) {
+      await connectWallet();
+      return;
+    }
+    const listing = item.marketplace.listing;
+    if (!listing) return;
+    await execute("Creating agent rental...", async () => {
+      await api(`/marketplace/listings/${listing.id}/rent`, {
+        method: "POST",
+        body: JSON.stringify({ renter_wallet: wallet, task_title: "Wallet analysis task", task_description: "Analyze wallet risk within passport limits.", duration_hours: 1 }),
+      });
+      await loadMarketplace();
+      setNotice(`${item.agent.name} rented for a guarded task`);
     });
   }
 
@@ -200,6 +251,7 @@ export default function App() {
         </button>
         <nav>
           <button className={view === "catalog" ? "active" : ""} onClick={() => setView("catalog")}>Directory</button>
+          <button className={view === "marketplace" ? "active" : ""} onClick={() => setView("marketplace")}>Marketplace</button>
           {passport && <button className={view === "passport" ? "active" : ""} onClick={() => setView("passport")}>Passport</button>}
         </nav>
         <div className="nav-actions">
@@ -245,8 +297,10 @@ export default function App() {
             </div>
           </section>
         </main>
+      ) : view === "marketplace" ? (
+        <MarketplaceView listings={listings} onPassport={openPassport} onRent={rentAgent} />
       ) : passport ? (
-        <PassportView passport={passport} onBack={() => setView("catalog")} onEvent={() => setModal("event")} onComplaint={() => setModal("complaint")} />
+        <PassportView passport={passport} onBack={() => setView("catalog")} onEvent={() => setModal("event")} onComplaint={() => setModal("complaint")} onSync={syncMantle} />
       ) : null}
 
       {modal === "agent" && (
@@ -304,11 +358,11 @@ function AgentCard({ item, onOpen }: { item: AgentSummary; onOpen(): void }) {
   );
 }
 
-function PassportView({ passport, onBack, onEvent, onComplaint }: { passport: Passport; onBack(): void; onEvent(): void; onComplaint(): void }) {
+function PassportView({ passport, onBack, onEvent, onComplaint, onSync }: { passport: Passport; onBack(): void; onEvent(): void; onComplaint(): void; onSync(): void }) {
   const { agent, reputation, analysis } = passport;
   return (
     <main className="passport-page">
-      <button className="back" onClick={onBack}>← Agent directory</button>
+      <div className="passport-actions"><button className="back" onClick={onBack}>← Agent directory</button><button className="primary small" onClick={onSync}>↻ Sync Mantle history</button></div>
       <section className="passport-hero">
         <div className="identity">
           <AgentIcon name={agent.name} large />
@@ -359,7 +413,7 @@ function PassportView({ passport, onBack, onEvent, onComplaint }: { passport: Pa
                 <div className="timeline-item" key={event.id}>
                   <span className={`event-dot ${event.outcome}`} />
                   <div><strong>{event.title}</strong><span>{event.category} · {dateLabel(event.created_at)}{event.tx_hash ? " · onchain verified" : ""}</span></div>
-                  <div className="event-value"><strong>{formatUsd(event.value_usd)}</strong><span className={event.outcome}>{event.outcome}</span></div>
+                  <div className="event-value"><strong>{formatUsd(event.value_usd)}</strong><span className={event.outcome}>{event.outcome}</span>{event.tx_hash && <a href={`https://explorer.mantle.xyz/tx/${event.tx_hash}`} target="_blank" rel="noreferrer">Explorer ↗</a>}</div>
                 </div>
               ))}
             </div>
@@ -373,6 +427,7 @@ function PassportView({ passport, onBack, onEvent, onComplaint }: { passport: Pa
             <Stat value={String(reputation.total_events)} label="Recorded actions" />
             <Stat value={String(reputation.complaint_count)} label="Active complaints" />
             <Stat value={dateLabel(agent.created_at)} label="Created" />
+            <Stat value={passport.sync_state ? dateLabel(passport.sync_state.last_synced_at) : "Not synced"} label="Last Mantle sync" />
           </article>
           <article className="panel">
             <div className="section-heading"><div><p className="kicker">Public signals</p><h2>Complaints</h2></div><button className="danger small" onClick={onComplaint}>+ Report</button></div>
@@ -384,6 +439,25 @@ function PassportView({ passport, onBack, onEvent, onComplaint }: { passport: Pa
       </section>
     </main>
   );
+}
+
+function MarketplaceView({ listings, onPassport, onRent }: { listings: MarketplaceCard[]; onPassport(id: number): void; onRent(item: MarketplaceCard): void }) {
+  return <main className="marketplace-page">
+    <section className="intro compact-intro"><div><p className="kicker">Phase two · agent labor market</p><h1>Hire agents with evidence, not promises.</h1><p>Each rental is bounded by the agent passport and becomes a new reputation signal after completion or dispute.</p></div></section>
+    <section className="directory"><div className="section-heading"><div><p className="kicker">Available workforce</p><h2>Agent marketplace</h2></div></div>
+      <div className="agent-grid">{listings.map((item) => {
+        const listing = item.marketplace.listing!;
+        return <article className="agent-card marketplace-card" key={listing.id}>
+          <div className="card-top"><AgentIcon name={item.agent.name} /><RiskBadge risk={item.reputation.risk_level} /></div>
+          <p className="agent-type">{listing.pricing_model} · {listing.availability}</p><h3>{item.agent.name}</h3>
+          <p className="description">{item.agent.description}</p>
+          <div className="capabilities">{listing.capabilities.map((capability) => <span key={capability}>{capability}</span>)}</div>
+          <div className="listing-price"><span>Price</span><strong>{formatUsd(listing.price_usd)}</strong></div>
+          <div className="market-actions"><button onClick={() => onPassport(item.agent.id)}>Passport</button><button className="primary" disabled={listing.availability !== "available" || item.reputation.risk_level === "High"} onClick={() => onRent(item)}>Rent agent</button></div>
+        </article>;
+      })}</div>
+    </section>
+  </main>;
 }
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose(): void; children: React.ReactNode }) {

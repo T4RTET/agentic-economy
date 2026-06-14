@@ -32,6 +32,10 @@ http://127.0.0.1:8000/docs
 ## API
 
 - `GET /health`
+- `GET /ready`
+- `GET /mantle/status`
+- `POST /mantle/transactions/verify`
+- `POST /mantle/agents/{agent_id}/sync`
 - `GET /project/hackathon-alignment`
 - `POST /auth/nonce`
 - `POST /auth/verify`
@@ -55,8 +59,10 @@ http://127.0.0.1:8000/docs
 - `POST /marketplace/agents/{agent_id}/listing`
 - `POST /marketplace/listings/{listing_id}/rent`
 - `GET /marketplace/rentals/{rental_id}`
+- `GET /marketplace/rentals?renter_wallet=0x...`
 - `POST /marketplace/rentals/{rental_id}/complete`
 - `POST /marketplace/rentals/{rental_id}/dispute`
+- `POST /marketplace/rentals/{rental_id}/cancel`
 - `POST /demo/reset`
 
 `POST /wallet/connect` remains available for backward-compatible demos. Frontends should use `POST /auth/nonce` followed by `POST /auth/verify` for secure MetaMask wallet ownership verification.
@@ -139,6 +145,24 @@ http://localhost:5173
 ```
 
 MetaMask must be installed in the browser.
+
+## Mantle Sync
+
+Transaction verification uses the public Mantle JSON-RPC endpoint directly. Full wallet-history discovery requires an indexed API because standard Ethereum JSON-RPC cannot search every transaction by wallet address.
+
+Set `ETHERSCAN_API_KEY` to enable `POST /mantle/agents/{agent_id}/sync`. The endpoint:
+
+- requires prior wallet ownership verification through `/auth/nonce` and `/auth/verify`;
+- imports indexed Mantle transactions;
+- skips already-known transaction hashes;
+- stores explorer-ready evidence;
+- recalculates the passport immediately.
+
+Copy `.env.example` for all runtime settings.
+
+## Production
+
+`render.yaml` and `Dockerfile` provide a deployable backend configuration. The Render blueprint stores SQLite on a persistent disk for the hackathon MVP. A PostgreSQL migration should be done as a dedicated repository-layer replacement after the MVP; the current repository intentionally keeps SQLite-specific queries rather than claiming partial PostgreSQL compatibility.
 
 ## Tests
 

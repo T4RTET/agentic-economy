@@ -345,6 +345,33 @@ class AgentPassport(BaseModel):
     actions_history: list[AgentEvent]
     complaints: list[Complaint]
     audit_log: list[dict[str, Any]]
+    sync_state: dict[str, Any] | None = None
+
+
+class MantleVerifyRequest(BaseModel):
+    tx_hash: str = Field(min_length=66, max_length=66)
+    wallet_address: str | None = Field(default=None, min_length=6, max_length=120)
+
+
+class MantleTransactionVerification(BaseModel):
+    tx_hash: str
+    verified: bool
+    wallet_involved: bool
+    outcome: Literal["success", "failed"]
+    from_address: str | None
+    to_address: str | None
+    value_wei: str
+    block_number: int | None
+    timestamp: str | None
+    explorer_url: str
+
+
+class MantleSyncResponse(BaseModel):
+    agent_id: int
+    wallet_address: str
+    imported_events: int
+    skipped_duplicates: int
+    passport: AgentPassport
 
 
 class WalletVerifyResponse(BaseModel):

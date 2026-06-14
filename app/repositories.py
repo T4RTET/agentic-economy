@@ -109,6 +109,48 @@ def create_event(db: sqlite3.Connection, agent_id: int, payload: AgentEventCreat
     return get_event(db, cursor.lastrowid)
 
 
+def event_exists_by_tx_hash(db: sqlite3.Connection, tx_hash: str) -> bool:
+    return db.execute("SELECT 1 FROM agent_events WHERE lower(tx_hash) = lower(?) LIMIT 1", (tx_hash,)).fetchone() is not None
+
+
+def create_synced_event(db: sqlite3.Connection, agent_id: int, event: dict[str, Any]) -> dict[str, Any]:
+    cursor = db.execute(
+        """
+        INSERT INTO agent_events (agent_id, title, category, outcome, value_usd, tx_hash, metadata_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            agent_id,
+            event["title"],
+            event["category"],
+            event["outcome"],
+            event["value_usd"],
+            event["tx_hash"],
+            json.dumps(event["metadata"]),
+            event["created_at"],
+        ),
+    )
+    add_audit_log(db, agent_id, "mantle.event_imported", {"tx_hash": event["tx_hash"]})
+    db.commit()
+    return get_event(db, cursor.lastrowid)
+
+
+def record_wallet_sync(db: sqlite3.Connection, agent_id: int, imported: int, skipped: int) -> None:
+    db.execute(
+        """
+        INSERT INTO wallet_sync_state (agent_id, imported_events, skipped_duplicates)
+        VALUES (?, ?, ?)
+        ON CONFLICT(agent_id) DO UPDATE SET
+            last_synced_at = CURRENT_TIMESTAMP,
+            imported_events = excluded.imported_events,
+            skipped_duplicates = excluded.skipped_duplicates
+        """,
+        (agent_id, imported, skipped),
+    )
+    add_audit_log(db, agent_id, "mantle.history_synced", {"imported_events": imported, "skipped_duplicates": skipped})
+    db.commit()
+
+
 def list_events(db: sqlite3.Connection, agent_id: int) -> list[dict[str, Any]]:
     rows = db.execute(
         "SELECT * FROM agent_events WHERE agent_id = ? ORDER BY created_at DESC, id DESC",
@@ -170,6 +212,7 @@ def update_complaint(db: sqlite3.Connection, complaint_id: int, payload: Complai
 
 
 def reset_demo_data(db: sqlite3.Connection) -> None:
+    db.execute("DELETE FROM wallet_sync_state")
     db.execute("DELETE FROM audit_log")
     db.execute("DELETE FROM wallet_auth_nonces")
     db.execute("DELETE FROM rentals")
@@ -397,7 +440,38 @@ def build_passport(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | No
         "actions_history": events,
         "complaints": complaints,
         "audit_log": list_audit_log(db, agent_id),
+        "sync_state": get_wallet_sync_state(db, agent_id),
     }
+
+
+def get_wallet_sync_state(db: sqlite3.Connection, agent_id: int) -> dict[str, Any] | None:
+    row = db.execute("SELECT * FROM wallet_sync_state WHERE agent_id = ?", (agent_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_rentals(db: sqlite3.Connection, renter_wallet: str | None = None) -> list[dict[str, Any]]:
+    if renter_wallet:
+        rows = db.execute(
+            "SELECT * FROM rentals WHERE lower(renter_wallet) = lower(?) ORDER BY created_at DESC, id DESC",
+            (renter_wallet,),
+        ).fetchall()
+    else:
+        rows = db.execute("SELECT * FROM rentals ORDER BY created_at DESC, id DESC").fetchall()
+    return [dict(row) for row in rows]
+
+
+def cancel_rental(db: sqlite3.Connection, rental_id: int) -> dict[str, Any] | None:
+    rental = get_rental(db, rental_id)
+    if not rental or rental["status"] not in {"pending", "active"}:
+        return None
+    db.execute("UPDATE rentals SET status = 'cancelled' WHERE id = ?", (rental_id,))
+    db.execute(
+        "UPDATE marketplace_listings SET availability = 'available', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (rental["listing_id"],),
+    )
+    add_audit_log(db, rental["agent_id"], "rental.cancelled", {"rental_id": rental_id})
+    db.commit()
+    return get_rental(db, rental_id)
 
 
 def build_passport_analysis(
@@ -496,7 +570,7 @@ def _build_reputation_context(
         events,
         complaints,
         agent_created_at=agent["created_at"],
-        wallet_verified=_wallet_is_verified(db, agent["owner_wallet"], agent["chain_id"]),
+        wallet_verified=wallet_is_verified(db, agent["owner_wallet"], agent["chain_id"]),
     ).__dict__
     return reputation, event_rows, complaint_rows
 
@@ -528,7 +602,7 @@ def _calculate_rental_price(listing: dict[str, Any], duration_hours: int) -> flo
     return round(listing["price_usd"], 2)
 
 
-def _wallet_is_verified(db: sqlite3.Connection, wallet_address: str, chain_id: int) -> bool:
+def wallet_is_verified(db: sqlite3.Connection, wallet_address: str, chain_id: int) -> bool:
     row = db.execute(
         """
         SELECT id
