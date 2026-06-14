@@ -1,730 +1,428 @@
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import {
-  executeSmartAccountPayload,
-  isSmartAccountAvailable,
-  requestSmartAccountDelegation,
-} from "./services/smartAccount";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL ?? "http://127.0.0.1:8000";
-const DEFAULT_CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID ?? 5000);
-const DEFAULT_AGENT_NAME = import.meta.env.VITE_AGENT_NAME ?? "My MetaMask Test Agent";
-const DEFAULT_AGENT_TYPE = import.meta.env.VITE_AGENT_TYPE ?? "wallet-linked-agent";
-const DEFAULT_RECIPIENT = "0x000000000000000000000000000000000000dEaD";
+const MANTLE_CHAIN_ID = 5000;
 
-type EthereumProvider = {
-  request(args: { method: string; params?: unknown[] | Record<string, unknown> }): Promise<unknown>;
-  on?(event: string, handler: (value: unknown) => void): void;
-  removeListener?(event: string, handler: (value: unknown) => void): void;
+type Risk = "Low" | "Medium" | "High";
+type Agent = {
+  id: number;
+  name: string;
+  description: string;
+  agent_type: string;
+  owner_wallet: string;
+  chain_id: number;
+  status: string;
+  created_at: string;
 };
+type Reputation = {
+  trust_score: number;
+  risk_level: Risk;
+  recommended_wallet_limit_usd: number;
+  successful_volume_usd: number;
+  total_events: number;
+  complaint_count: number;
+  score_breakdown: Record<string, { score: number; max: number; description: string; penalty_applied?: number }>;
+};
+type Event = {
+  id: number;
+  title: string;
+  category: string;
+  outcome: "success" | "failed" | "error";
+  value_usd: number;
+  tx_hash: string | null;
+  created_at: string;
+};
+type Complaint = {
+  id: number;
+  reason: string;
+  severity: "low" | "medium" | "high";
+  status: "open" | "confirmed" | "dismissed";
+  created_at: string;
+};
+type Passport = {
+  agent: Agent;
+  reputation: Reputation;
+  analysis: { summary: string; strengths: string[]; risk_flags: string[]; recommendation: string };
+  actions_history: Event[];
+  complaints: Complaint[];
+};
+type AgentSummary = { agent: Agent; reputation: Reputation };
+type View = "catalog" | "passport";
 
 declare global {
   interface Window {
-    ethereum?: EthereumProvider;
+    ethereum?: { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
   }
-}
-
-type AgentPassport = {
-  agent: {
-    id: number;
-    name: string;
-    owner_wallet: string;
-    chain_id: number;
-  };
-  reputation: {
-    trust_score: number;
-    risk_level: "Low" | "Medium" | "High";
-    recommended_wallet_limit_usd: number;
-  };
-};
-
-type WalletNonceResponse = { message: string };
-
-type WalletVerifyResponse = {
-  verified: boolean;
-  agent_id?: number;
-  passport: AgentPassport;
-};
-
-type IntelligenceReport = {
-  summary: string;
-  wallet_permission: {
-    decision: "allow" | "limit" | "deny";
-    recommended_limit_usd: number;
-    reason: string;
-  };
-  risk_assessment: {
-    risk_level: "Low" | "Medium" | "High";
-    main_risks: string[];
-    confidence: "low" | "medium" | "high";
-  };
-  marketplace_verdict: {
-    can_be_listed: boolean;
-    can_be_rented: boolean;
-    reason: string;
-  };
-  suggested_next_actions: string[];
-};
-
-type AutomationMode = "manual" | "semi_auto" | "full_auto";
-type PresetName = "safe" | "balanced" | "custom";
-
-type AutomationPolicy = {
-  id: number;
-  agent_id: number;
-  automation_enabled: boolean;
-  mode: AutomationMode;
-  max_tx_value_usd: number;
-  daily_limit_usd: number;
-  max_transactions_per_hour: number;
-  min_native_balance_wei: string;
-  require_confirmation_above_usd: number;
-  allowed_chain_ids: number[];
-  allowed_tokens: string[];
-  allowed_recipients: string[];
-  allowed_actions: string[];
-  emergency_stop: boolean;
-  smart_account_address: string | null;
-  delegation_id: string | null;
-  delegation_status: "none" | "requested" | "active" | "revoked" | "expired";
-  delegation_scope: Record<string, unknown>;
-};
-
-type PolicyForm = {
-  automation_enabled: boolean;
-  mode: AutomationMode;
-  max_tx_value_usd: string;
-  daily_limit_usd: string;
-  max_transactions_per_hour: string;
-  min_native_balance_wei: string;
-  require_confirmation_above_usd: string;
-  allowed_chain_ids: string;
-  allowed_tokens: string;
-  allowed_recipients: string;
-  allowed_actions: string;
-  emergency_stop: boolean;
-};
-
-type AutomationEvaluation = {
-  allowed: boolean;
-  requires_user_confirmation: boolean;
-  can_auto_execute: boolean;
-  delegation_required: boolean;
-  reason: string;
-  violations: string[];
-};
-
-type DelegationRequest = {
-  agent_id: number;
-  delegation_status: string;
-  message: string;
-  policy_scope: Record<string, unknown>;
-  request: Record<string, unknown>;
-};
-
-type AutomatedTransactionResponse = {
-  executed: boolean;
-  requires_user_confirmation: boolean;
-  delegation_required: boolean;
-  status: string;
-  reason: string;
-  attempt_id: number;
-  transaction_request: Record<string, string> | null;
-  smart_account_execution_payload: Record<string, unknown> | null;
-  tx_hash: string | null;
-  evaluation: AutomationEvaluation;
-};
-
-type ActionForm = {
-  action_type: string;
-  recipient: string;
-  token: string;
-  value_wei: string;
-  value_usd: string;
-  chain_id: string;
-  reason: string;
-};
-
-const defaultActionForm: ActionForm = {
-  action_type: "native_transfer",
-  recipient: DEFAULT_RECIPIENT,
-  token: "",
-  value_wei: "1000000000000000",
-  value_usd: "1",
-  chain_id: String(DEFAULT_CHAIN_ID),
-  reason: "Локальный тест автоматического действия",
-};
-
-function presetPolicy(preset: PresetName, chainId: number, recipient: string): PolicyForm {
-  const baseRecipient = recipient || DEFAULT_RECIPIENT;
-  if (preset === "balanced") {
-    return {
-      automation_enabled: true,
-      mode: "semi_auto",
-      max_tx_value_usd: "5",
-      daily_limit_usd: "20",
-      max_transactions_per_hour: "3",
-      min_native_balance_wei: "100000000000000000",
-      require_confirmation_above_usd: "5",
-      allowed_chain_ids: String(chainId),
-      allowed_tokens: "NATIVE",
-      allowed_recipients: baseRecipient,
-      allowed_actions: "native_transfer",
-      emergency_stop: false,
-    };
-  }
-
-  return {
-    automation_enabled: true,
-    mode: "semi_auto",
-    max_tx_value_usd: "1",
-    daily_limit_usd: "5",
-    max_transactions_per_hour: "1",
-    min_native_balance_wei: "100000000000000000",
-    require_confirmation_above_usd: "1",
-    allowed_chain_ids: String(chainId),
-    allowed_tokens: "NATIVE",
-    allowed_recipients: baseRecipient,
-    allowed_actions: "native_transfer",
-    emergency_stop: false,
-  };
 }
 
 export default function App() {
-  const [walletAddress, setWalletAddress] = useState("");
-  const [chainId, setChainId] = useState(DEFAULT_CHAIN_ID);
-  const [passport, setPassport] = useState<AgentPassport | null>(null);
-  const [intelligence, setIntelligence] = useState<IntelligenceReport | null>(null);
-  const [policy, setPolicy] = useState<AutomationPolicy | null>(null);
-  const [policyForm, setPolicyForm] = useState<PolicyForm>(() => presetPolicy("safe", DEFAULT_CHAIN_ID, DEFAULT_RECIPIENT));
-  const [preset, setPreset] = useState<PresetName>("safe");
-  const [delegationRequest, setDelegationRequest] = useState<DelegationRequest | null>(null);
-  const [smartAccountMessage, setSmartAccountMessage] = useState("");
-  const [evaluation, setEvaluation] = useState<AutomationEvaluation | null>(null);
-  const [actionForm, setActionForm] = useState<ActionForm>(defaultActionForm);
-  const [automatedResult, setAutomatedResult] = useState<AutomatedTransactionResponse | null>(null);
-  const [txHash, setTxHash] = useState("");
-  const [status, setStatus] = useState("Готово");
-  const [error, setError] = useState("");
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [passport, setPassport] = useState<Passport | null>(null);
+  const [view, setView] = useState<View>("catalog");
+  const [query, setQuery] = useState("");
+  const [riskFilter, setRiskFilter] = useState<"All" | Risk>("All");
+  const [modal, setModal] = useState<"agent" | "event" | "complaint" | null>(null);
+  const [wallet, setWallet] = useState("");
+  const [notice, setNotice] = useState("Loading reputation network...");
   const [busy, setBusy] = useState(false);
 
-  const agentId = passport?.agent.id ?? null;
-  const verified = Boolean(agentId && passport);
-  const automationEnabled = Boolean(policy?.automation_enabled && policy.delegation_status === "active");
-  const canEnableAutomation = useMemo(() => {
-    return Boolean(walletAddress && agentId && intelligence?.wallet_permission.decision !== "deny" && !busy);
-  }, [agentId, busy, intelligence, walletAddress]);
+  const filteredAgents = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return agents.filter(({ agent, reputation }) => {
+      const matchesText = !needle || `${agent.name} ${agent.description} ${agent.agent_type}`.toLowerCase().includes(needle);
+      return matchesText && (riskFilter === "All" || reputation.risk_level === riskFilter);
+    });
+  }, [agents, query, riskFilter]);
 
   useEffect(() => {
-    const provider = window.ethereum;
-    if (!provider?.on) return;
-
-    const handleAccounts = (value: unknown) => {
-      const accounts = Array.isArray(value) ? value : [];
-      const nextAccount = typeof accounts[0] === "string" ? accounts[0] : "";
-      setWalletAddress(nextAccount);
-      setPassport(null);
-      setIntelligence(null);
-      setPolicy(null);
-    };
-
-    const handleChain = (value: unknown) => {
-      if (typeof value === "string") {
-        const parsed = Number.parseInt(value, 16);
-        setChainId(Number.isFinite(parsed) ? parsed : DEFAULT_CHAIN_ID);
-        setActionForm((current) => ({ ...current, chain_id: String(Number.isFinite(parsed) ? parsed : DEFAULT_CHAIN_ID) }));
-      }
-    };
-
-    provider.on("accountsChanged", handleAccounts);
-    provider.on("chainChanged", handleChain);
-
-    return () => {
-      provider.removeListener?.("accountsChanged", handleAccounts);
-      provider.removeListener?.("chainChanged", handleChain);
-    };
+    void loadAgents();
   }, []);
 
-  async function run(label: string, action: () => Promise<void>) {
+  async function execute(label: string, action: () => Promise<void>) {
     setBusy(true);
-    setError("");
-    setStatus(label);
+    setNotice(label);
     try {
       await action();
-    } catch (err) {
-      setError(readableError(err));
+    } catch (error) {
+      setNotice(readableError(error));
     } finally {
       setBusy(false);
     }
   }
 
-  async function connectMetaMask() {
-    await run("Подключаю MetaMask", async () => {
-      if (!window.ethereum) throw new Error("MetaMask не установлен. Установите расширение браузера.");
+  async function loadAgents() {
+    await execute("Reading verified agent history...", async () => {
+      const data = await api<AgentSummary[]>("/agents");
+      setAgents(data);
+      setNotice(`${data.length} agent passports available`);
+    });
+  }
+
+  async function openPassport(id: number) {
+    await execute("Building agent passport...", async () => {
+      const data = await api<Passport>(`/agents/${id}/passport`);
+      setPassport(data);
+      setView("passport");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setNotice(`Passport #${id} verified`);
+    });
+  }
+
+  async function connectWallet() {
+    await execute("Connecting wallet...", async () => {
+      if (!window.ethereum) throw new Error("MetaMask is not installed. You can still explore demo passports.");
       const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
-      const chainHex = (await window.ethereum.request({ method: "eth_chainId" })) as string;
-      const nextChainId = Number.parseInt(chainHex, 16);
-      const nextWallet = accounts[0] ?? "";
-      setWalletAddress(nextWallet);
-      setChainId(nextChainId);
-      setPolicyForm(presetPolicy(preset, nextChainId, actionForm.recipient));
-      setActionForm((current) => ({ ...current, chain_id: String(nextChainId) }));
-      setStatus("MetaMask подключён");
-    });
-  }
-
-  async function verifyWallet() {
-    await run("Проверяю владение кошельком", async () => {
-      if (!window.ethereum) throw new Error("MetaMask не установлен.");
-      if (!walletAddress) throw new Error("Сначала подключите MetaMask.");
-      const nonce = await postJson<WalletNonceResponse>("/auth/nonce", {
-        wallet_address: walletAddress,
-        chain_id: chainId,
-      });
-      const signature = (await window.ethereum.request({
-        method: "personal_sign",
-        params: [nonce.message, walletAddress],
-      })) as string;
-      const verifiedWallet = await postJson<WalletVerifyResponse>("/auth/verify", {
-        wallet_address: walletAddress,
-        chain_id: chainId,
-        message: nonce.message,
-        signature,
-        agent_name: DEFAULT_AGENT_NAME,
-        agent_type: DEFAULT_AGENT_TYPE,
-      });
-      setPassport(verifiedWallet.passport);
-      const report = await getJson<IntelligenceReport>(`/agents/${verifiedWallet.passport.agent.id}/intelligence`);
-      setIntelligence(report);
-      const nextPolicy = await getJson<AutomationPolicy>(`/agents/${verifiedWallet.passport.agent.id}/automation-policy`);
-      setPolicy(nextPolicy);
-      setPolicyForm(policyToForm(nextPolicy));
-      setStatus("Кошелёк подтверждён, агент привязан");
-    });
-  }
-
-  async function loadPolicy() {
-    await run("Загружаю policy", async () => {
-      const id = requireAgentId();
-      const nextPolicy = await getJson<AutomationPolicy>(`/agents/${id}/automation-policy`);
-      setPolicy(nextPolicy);
-      setPolicyForm(policyToForm(nextPolicy));
-      setStatus("Policy загружена");
-    });
-  }
-
-  async function enableAutomation() {
-    await run("Включаю автоматизацию", async () => {
-      const id = requireAgentId();
-      if (!walletAddress) throw new Error("Сначала подключите MetaMask.");
-      if (intelligence?.wallet_permission.decision === "deny") {
-        throw new Error("Intelligence запрещает wallet-действия для этого агента.");
-      }
-
-      const savedPolicy = await putJson<AutomationPolicy>(`/agents/${id}/automation-policy`, buildPolicyPayload(policyForm));
-      setPolicy(savedPolicy);
-      const request = await postJson<DelegationRequest>(`/agents/${id}/automation/delegation/request`, {});
-      setDelegationRequest(request);
-
+      const address = accounts[0];
+      if (!address) throw new Error("No wallet selected.");
+      setWallet(address);
       try {
-        await requestSmartAccountDelegation({
-          agentId: id,
-          walletAddress,
-          policyScope: request.policy_scope,
-          request: request.request,
-        });
-        setSmartAccountMessage("MetaMask Smart Account delegation запрошен через SDK.");
-      } catch (err) {
-        setSmartAccountMessage(readableError(err));
+        const existing = await api<Passport>(`/wallet/${address}/passport?chain_id=${MANTLE_CHAIN_ID}`);
+        setPassport(existing);
+        setView("passport");
+        setNotice("Wallet-linked passport found");
+      } catch {
+        setNotice("Wallet connected. Create an agent passport to link it.");
+        setModal("agent");
       }
-
-      setStatus("Настройки сохранены. Подтвердите delegation в MetaMask или используйте локальный тест.");
     });
   }
 
-  async function confirmTestDelegation() {
-    await run("Подтверждаю test delegation", async () => {
-      const id = requireAgentId();
-      if (!walletAddress) throw new Error("Сначала подключите MetaMask.");
-      const scope = delegationRequest?.policy_scope ?? policy?.delegation_scope ?? buildPolicyPayload(policyForm);
-      const nextPolicy = await postJson<AutomationPolicy>(`/agents/${id}/automation/delegation/confirm`, {
-        smart_account_address: walletAddress,
-        delegation_id: `local-test-delegation-${id}`,
-        delegation_scope: scope,
+  async function resetDemo() {
+    await execute("Resetting demo data...", async () => {
+      await api("/demo/reset", { method: "POST" });
+      setPassport(null);
+      setView("catalog");
+      await loadAgents();
+      setNotice("Demo restored: three distinct risk profiles");
+    });
+  }
+
+  async function submitAgent(form: HTMLFormElement) {
+    const data = new FormData(form);
+    await execute("Issuing agent passport...", async () => {
+      const agent = await api<Agent>("/agents", {
+        method: "POST",
+        body: JSON.stringify({
+          name: data.get("name"),
+          description: data.get("description"),
+          agent_type: data.get("agent_type"),
+          owner_wallet: data.get("owner_wallet"),
+          chain_id: MANTLE_CHAIN_ID,
+        }),
       });
-      setPolicy(nextPolicy);
-      setPolicyForm(policyToForm(nextPolicy));
-      setStatus("Automation Enabled");
+      setModal(null);
+      await loadAgents();
+      await openPassport(agent.id);
     });
   }
 
-  async function evaluateAction() {
-    await run("Проверяю действие через policy engine", async () => {
-      const id = requireAgentId();
-      const result = await postJson<AutomationEvaluation>(`/agents/${id}/automation-policy/evaluate`, buildActionPayload(actionForm));
-      setEvaluation(result);
-      setStatus(result.reason);
+  async function submitEvent(form: HTMLFormElement) {
+    if (!passport) return;
+    const data = new FormData(form);
+    await execute("Adding verifiable action...", async () => {
+      await api(`/agents/${passport.agent.id}/events`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: data.get("title"),
+          category: data.get("category"),
+          outcome: data.get("outcome"),
+          value_usd: Number(data.get("value_usd")),
+          tx_hash: data.get("tx_hash") || null,
+          metadata: { source: "passport-demo" },
+        }),
+      });
+      setModal(null);
+      await openPassport(passport.agent.id);
+      await loadAgents();
     });
   }
 
-  async function runAutomatedAction() {
-    await run("Запускаю автоматическое действие", async () => {
-      const id = requireAgentId();
-      const result = await postJson<AutomatedTransactionResponse>(
-        `/agents/${id}/transactions/execute-automated`,
-        buildActionPayload(actionForm),
-      );
-      setAutomatedResult(result);
-      setEvaluation(result.evaluation);
-      setStatus(result.reason);
-
-      if (result.delegation_required) {
-        setSmartAccountMessage("Нужно включить Automation / Delegation.");
-        return;
-      }
-
-      if (result.smart_account_execution_payload) {
-        try {
-          const smartResult = await executeSmartAccountPayload(result.smart_account_execution_payload);
-          if (smartResult.txHash) setTxHash(smartResult.txHash);
-          setSmartAccountMessage("Smart Account payload отправлен через SDK.");
-        } catch (err) {
-          setSmartAccountMessage(readableError(err));
-        }
-      }
+  async function submitComplaint(form: HTMLFormElement) {
+    if (!passport) return;
+    const data = new FormData(form);
+    await execute("Recording risk signal...", async () => {
+      await api(`/agents/${passport.agent.id}/complaints`, {
+        method: "POST",
+        body: JSON.stringify({ reason: data.get("reason"), severity: data.get("severity"), status: "open" }),
+      });
+      setModal(null);
+      await openPassport(passport.agent.id);
+      await loadAgents();
     });
-  }
-
-  async function sendWithMetaMask() {
-    await run("Отправляю через MetaMask", async () => {
-      if (!window.ethereum) throw new Error("MetaMask не установлен.");
-      if (!automatedResult?.transaction_request) throw new Error("Нет подготовленной транзакции для MetaMask.");
-      const sentHash = (await window.ethereum.request({
-        method: "eth_sendTransaction",
-        params: [automatedResult.transaction_request],
-      })) as string;
-      setTxHash(sentHash);
-      setStatus("Транзакция отправлена через MetaMask");
-    });
-  }
-
-  function applyPreset(nextPreset: PresetName) {
-    setPreset(nextPreset);
-    if (nextPreset !== "custom") {
-      setPolicyForm(presetPolicy(nextPreset, chainId, actionForm.recipient));
-    }
-  }
-
-  function updatePolicyField<Key extends keyof PolicyForm>(key: Key, value: PolicyForm[Key]) {
-    setPreset("custom");
-    setPolicyForm((current) => ({ ...current, [key]: value }));
-  }
-
-  function requireAgentId() {
-    if (!agentId) throw new Error("Сначала подтвердите кошелёк и привяжите агента.");
-    return agentId;
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Agentic Economy</p>
-          <h1>AI-агент с MetaMask Automation</h1>
-          <p className="lead">Одна кнопка включает policy, Smart Account delegation и безопасный тест автоматического действия.</p>
-        </div>
-        <div className="header-actions">
-          <button type="button" onClick={connectMetaMask} disabled={busy}>Connect MetaMask</button>
-          <button type="button" className="primary" onClick={verifyWallet} disabled={busy || !walletAddress}>Verify Wallet</button>
+    <div className="app">
+      <header className="nav">
+        <button className="brand" onClick={() => setView("catalog")} aria-label="Open agent directory">
+          <span className="brand-mark">A</span>
+          <span><strong>Agent Passport</strong><small>Trust layer on Mantle</small></span>
+        </button>
+        <nav>
+          <button className={view === "catalog" ? "active" : ""} onClick={() => setView("catalog")}>Directory</button>
+          {passport && <button className={view === "passport" ? "active" : ""} onClick={() => setView("passport")}>Passport</button>}
+        </nav>
+        <div className="nav-actions">
+          <button className="icon-button" onClick={resetDemo} title="Reset demo" disabled={busy}>↻</button>
+          <button className="wallet-button" onClick={connectWallet} disabled={busy}>
+            <span className="status-dot" />{wallet ? shortAddress(wallet) : "Connect wallet"}
+          </button>
         </div>
       </header>
 
-      <section className="status-row" aria-live="polite">
-        <span className="status-pill">{status}</span>
-        <span className="wallet-pill">Backend: {API_BASE}</span>
-        {walletAddress && <span className="wallet-pill">{shortAddress(walletAddress)}</span>}
-        {error && <span className="error-text">{error}</span>}
+      <div className="notice" aria-live="polite"><span className={busy ? "pulse" : ""} />{notice}</div>
+
+      {view === "catalog" ? (
+        <main>
+          <section className="intro">
+            <div>
+              <p className="kicker">Reputation infrastructure for autonomous finance</p>
+              <h1>Know what an agent can be trusted with.</h1>
+              <p>Every passport turns wallet activity, execution quality, complaints, and onchain evidence into an explainable trust decision.</p>
+            </div>
+            <div className="network-stats">
+              <Stat value={String(agents.length)} label="Registered agents" />
+              <Stat value={formatUsd(agents.reduce((sum, item) => sum + item.reputation.successful_volume_usd, 0))} label="Verified volume" />
+              <Stat value="Mantle" label="Settlement network" />
+            </div>
+          </section>
+
+          <section className="directory">
+            <div className="section-heading">
+              <div><p className="kicker">Live registry</p><h2>Agent directory</h2></div>
+              <button className="primary" onClick={() => setModal("agent")}>+ Issue passport</button>
+            </div>
+            <div className="filters">
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search agents, capabilities, types..." />
+              <div className="segments">
+                {(["All", "Low", "Medium", "High"] as const).map((risk) => (
+                  <button key={risk} className={riskFilter === risk ? "selected" : ""} onClick={() => setRiskFilter(risk)}>{risk}</button>
+                ))}
+              </div>
+            </div>
+            <div className="agent-grid">
+              {filteredAgents.map((item) => <AgentCard key={item.agent.id} item={item} onOpen={() => openPassport(item.agent.id)} />)}
+            </div>
+          </section>
+        </main>
+      ) : passport ? (
+        <PassportView passport={passport} onBack={() => setView("catalog")} onEvent={() => setModal("event")} onComplaint={() => setModal("complaint")} />
+      ) : null}
+
+      {modal === "agent" && (
+        <Modal title="Issue agent passport" subtitle="Register an AI agent and bind it to an owner wallet." onClose={() => setModal(null)}>
+          <DataForm onSubmit={submitAgent} submitLabel="Issue passport">
+            <Field label="Agent name" name="name" placeholder="Treasury Guard" minLength={2} />
+            <Field label="Agent type" name="agent_type" placeholder="defi-risk-agent" minLength={2} />
+            <Field label="Owner wallet" name="owner_wallet" defaultValue={wallet} placeholder="0x..." minLength={6} wide />
+            <Field label="Description" name="description" placeholder="What the agent does and where it operates" wide textarea />
+          </DataForm>
+        </Modal>
+      )}
+      {modal === "event" && (
+        <Modal title="Add verified action" subtitle="Every outcome updates the passport immediately." onClose={() => setModal(null)}>
+          <DataForm onSubmit={submitEvent} submitLabel="Record action">
+            <Field label="Action title" name="title" placeholder="Executed guarded swap" minLength={2} />
+            <Field label="Category" name="category" placeholder="swap" minLength={2} />
+            <Select label="Outcome" name="outcome" options={["success", "failed", "error"]} />
+            <Field label="Value, USD" name="value_usd" type="number" defaultValue="100" min="0" />
+            <Field label="Transaction hash" name="tx_hash" placeholder="0x... (optional)" wide />
+          </DataForm>
+        </Modal>
+      )}
+      {modal === "complaint" && (
+        <Modal title="Submit complaint" subtitle="Complaints are visible risk signals and affect trust." onClose={() => setModal(null)}>
+          <DataForm onSubmit={submitComplaint} submitLabel="Submit complaint">
+            <Select label="Severity" name="severity" options={["low", "medium", "high"]} />
+            <Field label="Reason" name="reason" placeholder="Describe the issue clearly" minLength={4} wide textarea />
+          </DataForm>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function AgentCard({ item, onOpen }: { item: AgentSummary; onOpen(): void }) {
+  const { agent, reputation } = item;
+  return (
+    <article className="agent-card" onClick={onOpen}>
+      <div className="card-top"><AgentIcon name={agent.name} /><RiskBadge risk={reputation.risk_level} /></div>
+      <p className="agent-type">{agent.agent_type}</p>
+      <h3>{agent.name}</h3>
+      <p className="description">{agent.description}</p>
+      <div className="trust-row">
+        <ScoreRing score={reputation.trust_score} risk={reputation.risk_level} />
+        <div><span>Recommended wallet limit</span><strong>{formatUsd(reputation.recommended_wallet_limit_usd)}</strong></div>
+      </div>
+      <div className="card-metrics">
+        <span><strong>{reputation.total_events}</strong> actions</span>
+        <span><strong>{formatUsd(reputation.successful_volume_usd)}</strong> handled</span>
+        <span><strong>{reputation.complaint_count}</strong> complaints</span>
+      </div>
+      <button className="card-link">Open passport <span>→</span></button>
+    </article>
+  );
+}
+
+function PassportView({ passport, onBack, onEvent, onComplaint }: { passport: Passport; onBack(): void; onEvent(): void; onComplaint(): void }) {
+  const { agent, reputation, analysis } = passport;
+  return (
+    <main className="passport-page">
+      <button className="back" onClick={onBack}>← Agent directory</button>
+      <section className="passport-hero">
+        <div className="identity">
+          <AgentIcon name={agent.name} large />
+          <div><p className="agent-type">{agent.agent_type}</p><h1>{agent.name}</h1><p>{agent.description}</p></div>
+        </div>
+        <div className="passport-score">
+          <ScoreRing score={reputation.trust_score} risk={reputation.risk_level} large />
+          <div><RiskBadge risk={reputation.risk_level} /><span>Recommended wallet access</span><strong>{formatUsd(reputation.recommended_wallet_limit_usd)}</strong></div>
+        </div>
       </section>
 
-      <section className="workspace">
-        <Panel title="MetaMask">
-          <Facts
-            items={[
-              ["Кошелёк", walletAddress || "Не подключён"],
-              ["Chain ID", String(chainId)],
-              ["Smart Account SDK", isSmartAccountAvailable() ? "доступен" : "не подключён"],
-            ]}
-          />
-          <p className="hint">Seed phrase и private key здесь не нужны и никогда не отправляются в backend.</p>
-        </Panel>
+      <section className="passport-meta">
+        <div><span>Owner wallet</span><strong>{shortAddress(agent.owner_wallet)}</strong></div>
+        <div><span>Network</span><strong>Mantle · {agent.chain_id}</strong></div>
+        <div><span>Passport ID</span><strong>ARP-{String(agent.id).padStart(6, "0")}</strong></div>
+        <div><span>Status</span><strong className="verified">● {agent.status}</strong></div>
+      </section>
 
-        <Panel title="Паспорт агента">
-          {passport ? (
-            <Facts
-              items={[
-                ["Agent ID", String(passport.agent.id)],
-                ["Имя", passport.agent.name],
-                ["Owner wallet", passport.agent.owner_wallet],
-                ["Trust score", `${passport.reputation.trust_score}/100`],
-                ["Risk", passport.reputation.risk_level],
-              ]}
-            />
-          ) : <p className="empty-state">Подключите MetaMask и нажмите Verify Wallet.</p>}
-        </Panel>
-
-        <Panel title="Intelligence">
-          {intelligence ? (
-            <>
-              <div className={`decision ${intelligence.wallet_permission.decision}`}>{intelligence.wallet_permission.decision}</div>
-              <p>{intelligence.summary}</p>
-              <p>{intelligence.wallet_permission.reason}</p>
-              <Facts
-                compact
-                items={[
-                  ["Риск", intelligence.risk_assessment.risk_level],
-                  ["Лимит", formatUsd(intelligence.wallet_permission.recommended_limit_usd)],
-                  ["Можно арендовать", intelligence.marketplace_verdict.can_be_rented ? "да" : "нет"],
-                ]}
-              />
-            </>
-          ) : <p className="empty-state">Intelligence появится после Verify Wallet.</p>}
-        </Panel>
-
-        {verified && (
-          <Panel title="Настройка автоматизации" wide>
-            <div className="setup-summary">
-              <Facts
-                compact
-                items={[
-                  ["Agent ID", String(agentId)],
-                  ["Wallet", walletAddress],
-                  ["Automation", automationEnabled ? "Automation Enabled" : policy?.automation_enabled ? "policy saved" : "off"],
-                  ["Delegation", policy?.delegation_status ?? "none"],
-                  ["Risk decision", intelligence?.wallet_permission.decision ?? "unknown"],
-                  ["Recommended limit", formatUsd(intelligence?.wallet_permission.recommended_limit_usd ?? 0)],
-                ]}
-              />
+      <section className="passport-layout">
+        <div className="main-column">
+          <article className="panel analysis">
+            <div className="section-heading"><div><p className="kicker">Decision intelligence</p><h2>Trust assessment</h2></div></div>
+            <p className="analysis-summary">{analysis.summary}</p>
+            <div className="signal-columns">
+              <div><h3>Strengths</h3>{analysis.strengths.map((item) => <p className="signal positive" key={item}>✓ {item}</p>)}</div>
+              <div><h3>Risk flags</h3>{analysis.risk_flags.length ? analysis.risk_flags.map((item) => <p className="signal negative" key={item}>! {item}</p>) : <p className="signal neutral">No material flags</p>}</div>
             </div>
+            <div className="recommendation"><span>Recommended action</span><strong>{analysis.recommendation}</strong></div>
+          </article>
 
-            <div className="preset-row" role="group" aria-label="Automation presets">
-              <button type="button" className={preset === "safe" ? "selected" : ""} onClick={() => applyPreset("safe")}>Safe</button>
-              <button type="button" className={preset === "balanced" ? "selected" : ""} onClick={() => applyPreset("balanced")}>Balanced</button>
-              <button type="button" className={preset === "custom" ? "selected" : ""} onClick={() => applyPreset("custom")}>Custom</button>
+          <article className="panel">
+            <div className="section-heading"><div><p className="kicker">Explainable score</p><h2>Trust factors</h2></div></div>
+            <div className="score-factors">
+              {Object.entries(reputation.score_breakdown).map(([key, factor]) => (
+                <div className="factor" key={key}>
+                  <div><strong>{titleCase(key)}</strong><span>{factor.description}</span></div>
+                  <div className="factor-score"><strong>{factor.score}</strong><span>/ {factor.max}</span></div>
+                  <div className="bar"><span style={{ width: `${Math.max(0, Math.min(100, (factor.score / factor.max) * 100))}%` }} /></div>
+                </div>
+              ))}
             </div>
+          </article>
 
-            <div className="form-grid">
-              <label className="check-row">
-                <input type="checkbox" checked={policyForm.automation_enabled} onChange={(event) => updatePolicyField("automation_enabled", event.target.checked)} />
-                automation_enabled
-              </label>
-              <label>mode
-                <select value={policyForm.mode} onChange={(event) => updatePolicyField("mode", event.target.value as AutomationMode)}>
-                  <option value="manual">manual</option>
-                  <option value="semi_auto">semi_auto</option>
-                  <option value="full_auto">full_auto</option>
-                </select>
-              </label>
-              <TextInput label="max_tx_value_usd" value={policyForm.max_tx_value_usd} onChange={(value) => updatePolicyField("max_tx_value_usd", value)} />
-              <TextInput label="daily_limit_usd" value={policyForm.daily_limit_usd} onChange={(value) => updatePolicyField("daily_limit_usd", value)} />
-              <TextInput label="max_transactions_per_hour" value={policyForm.max_transactions_per_hour} onChange={(value) => updatePolicyField("max_transactions_per_hour", value)} />
-              <TextInput label="min_native_balance_wei" value={policyForm.min_native_balance_wei} onChange={(value) => updatePolicyField("min_native_balance_wei", value)} />
-              <TextInput label="require_confirmation_above_usd" value={policyForm.require_confirmation_above_usd} onChange={(value) => updatePolicyField("require_confirmation_above_usd", value)} />
-              <label className="check-row">
-                <input type="checkbox" checked={policyForm.emergency_stop} onChange={(event) => updatePolicyField("emergency_stop", event.target.checked)} />
-                emergency_stop
-              </label>
-              <TextArea label="allowed_chain_ids" value={policyForm.allowed_chain_ids} onChange={(value) => updatePolicyField("allowed_chain_ids", value)} />
-              <TextArea label="allowed_tokens" value={policyForm.allowed_tokens} onChange={(value) => updatePolicyField("allowed_tokens", value)} />
-              <TextArea label="allowed_recipients" value={policyForm.allowed_recipients} onChange={(value) => updatePolicyField("allowed_recipients", value)} />
-              <TextArea label="allowed_actions" value={policyForm.allowed_actions} onChange={(value) => updatePolicyField("allowed_actions", value)} />
+          <article className="panel">
+            <div className="section-heading"><div><p className="kicker">Verifiable history</p><h2>Agent actions</h2></div><button className="primary small" onClick={onEvent}>+ Add action</button></div>
+            <div className="timeline">
+              {passport.actions_history.map((event) => (
+                <div className="timeline-item" key={event.id}>
+                  <span className={`event-dot ${event.outcome}`} />
+                  <div><strong>{event.title}</strong><span>{event.category} · {dateLabel(event.created_at)}{event.tx_hash ? " · onchain verified" : ""}</span></div>
+                  <div className="event-value"><strong>{formatUsd(event.value_usd)}</strong><span className={event.outcome}>{event.outcome}</span></div>
+                </div>
+              ))}
             </div>
+          </article>
+        </div>
 
-            <div className="button-row">
-              <button type="button" onClick={loadPolicy} disabled={busy || !agentId}>Load Policy</button>
-              <button type="button" className="primary" onClick={enableAutomation} disabled={!canEnableAutomation}>Enable Automation / Включить автоматизацию</button>
-              <button type="button" onClick={confirmTestDelegation} disabled={busy || !agentId}>Confirm Test Delegation</button>
-            </div>
-
-            <p className={automationEnabled ? "alert ok" : "alert"}>
-              {automationEnabled
-                ? "Automation Enabled: delegation active, действия всё равно проходят через policy engine и лимиты."
-                : "Для полной автоматизации нужен MetaMask Smart Account / Delegation. Обычный MetaMask EOA не может автоматически подтверждать транзакции."}
-            </p>
-            {smartAccountMessage && <p className="hint">{smartAccountMessage}</p>}
-            {delegationRequest && <JsonBlock title="Delegation request" value={delegationRequest} />}
-          </Panel>
-        )}
-
-        {verified && (
-          <Panel title="Тест автоматического действия" wide>
-            <div className="form-grid">
-              <TextInput label="action_type" value={actionForm.action_type} onChange={(value) => setActionForm({ ...actionForm, action_type: value })} />
-              <TextInput label="recipient address" value={actionForm.recipient} onChange={(value) => setActionForm({ ...actionForm, recipient: value })} />
-              <TextInput label="token" value={actionForm.token} onChange={(value) => setActionForm({ ...actionForm, token: value })} placeholder="пусто для NATIVE" />
-              <TextInput label="value_wei" value={actionForm.value_wei} onChange={(value) => setActionForm({ ...actionForm, value_wei: value })} />
-              <TextInput label="value_usd" value={actionForm.value_usd} onChange={(value) => setActionForm({ ...actionForm, value_usd: value })} />
-              <TextInput label="chain_id" value={actionForm.chain_id} onChange={(value) => setActionForm({ ...actionForm, chain_id: value })} />
-              <TextInput label="reason" value={actionForm.reason} onChange={(value) => setActionForm({ ...actionForm, reason: value })} />
-            </div>
-
-            <div className="button-row">
-              <button type="button" onClick={evaluateAction} disabled={busy || !agentId}>Evaluate Action</button>
-              <button type="button" className="primary" onClick={runAutomatedAction} disabled={busy || !agentId}>Run Automated Action</button>
-              {automatedResult?.requires_user_confirmation && (
-                <button type="button" onClick={sendWithMetaMask} disabled={busy}>Send with MetaMask</button>
-              )}
-            </div>
-
-            {evaluation && <Evaluation value={evaluation} />}
-            {txHash && <p className="alert ok">txHash: {txHash}</p>}
-            {automatedResult && <JsonBlock title="Automated response" value={automatedResult} />}
-          </Panel>
-        )}
+        <aside>
+          <article className="panel key-metrics">
+            <p className="kicker">Evidence snapshot</p><h2>Passport metrics</h2>
+            <Stat value={formatUsd(reputation.successful_volume_usd)} label="Successful volume" />
+            <Stat value={String(reputation.total_events)} label="Recorded actions" />
+            <Stat value={String(reputation.complaint_count)} label="Active complaints" />
+            <Stat value={dateLabel(agent.created_at)} label="Created" />
+          </article>
+          <article className="panel">
+            <div className="section-heading"><div><p className="kicker">Public signals</p><h2>Complaints</h2></div><button className="danger small" onClick={onComplaint}>+ Report</button></div>
+            {passport.complaints.length ? passport.complaints.map((complaint) => (
+              <div className="complaint" key={complaint.id}><RiskBadge risk={complaint.severity === "high" ? "High" : complaint.severity === "medium" ? "Medium" : "Low"} /><p>{complaint.reason}</p><span>{complaint.status} · {dateLabel(complaint.created_at)}</span></div>
+            )) : <p className="empty">No complaints recorded.</p>}
+          </article>
+        </aside>
       </section>
     </main>
   );
 }
 
-function Panel({ title, wide, children }: { title: string; wide?: boolean; children: ReactNode }) {
-  return <article className={`panel ${wide ? "wide" : ""}`}><h2>{title}</h2>{children}</article>;
+function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose(): void; children: React.ReactNode }) {
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}>×</button><p className="kicker">Agent Reputation Passport</p><h2>{title}</h2><p>{subtitle}</p>{children}</section></div>;
+}
+function DataForm({ onSubmit, submitLabel, children }: { onSubmit(form: HTMLFormElement): Promise<void>; submitLabel: string; children: React.ReactNode }) {
+  return <form className="data-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void onSubmit(event.currentTarget); }}>{children}<button className="primary submit" type="submit">{submitLabel}</button></form>;
+}
+function Field(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string; wide?: boolean; textarea?: boolean }) {
+  const { label, wide, textarea, ...inputProps } = props;
+  return <label className={wide ? "wide" : ""}><span>{label}</span>{textarea ? <textarea name={inputProps.name} placeholder={inputProps.placeholder} required /> : <input {...inputProps} required={inputProps.name !== "tx_hash"} />}</label>;
+}
+function Select({ label, name, options }: { label: string; name: string; options: string[] }) {
+  return <label><span>{label}</span><select name={name}>{options.map((option) => <option key={option}>{option}</option>)}</select></label>;
+}
+function AgentIcon({ name, large }: { name: string; large?: boolean }) {
+  return <div className={`agent-icon ${large ? "large" : ""}`}>{name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("")}</div>;
+}
+function RiskBadge({ risk }: { risk: Risk }) {
+  return <span className={`risk-badge ${risk.toLowerCase()}`}><i />{risk} risk</span>;
+}
+function ScoreRing({ score, risk, large }: { score: number; risk: Risk; large?: boolean }) {
+  return <div className={`score-ring ${risk.toLowerCase()} ${large ? "large" : ""}`} style={{ "--score": `${score * 3.6}deg` } as React.CSSProperties}><strong>{score}</strong><span>trust score</span></div>;
+}
+function Stat({ value, label }: { value: string; label: string }) {
+  return <div className="stat"><strong>{value}</strong><span>{label}</span></div>;
 }
 
-function TextInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange(value: string): void; placeholder?: string }) {
-  return <label>{label}<input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
-}
-
-function TextArea({ label, value, onChange }: { label: string; value: string; onChange(value: string): void }) {
-  return <label>{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} /></label>;
-}
-
-function Facts({ items, compact }: { items: Array<[string, string]>; compact?: boolean }) {
-  return <dl className={`facts ${compact ? "compact" : ""}`}>{items.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
-}
-
-function JsonBlock({ title, value }: { title: string; value: unknown }) {
-  return <details className="json-block"><summary>{title}</summary><pre>{JSON.stringify(value, null, 2)}</pre></details>;
-}
-
-function Evaluation({ value }: { value: AutomationEvaluation }) {
-  return (
-    <div className="evaluation">
-      <strong>{value.allowed ? "Разрешено" : "Заблокировано"}</strong>
-      <span>confirmation: {String(value.requires_user_confirmation)}</span>
-      <span>auto: {String(value.can_auto_execute)}</span>
-      <span>delegation_required: {String(value.delegation_required)}</span>
-      <p>{value.reason}</p>
-      {value.violations.length > 0 && <ul>{value.violations.map((item) => <li key={item}>{item}</li>)}</ul>}
-    </div>
-  );
-}
-
-async function getJson<TResponse>(path: string): Promise<TResponse> {
-  const response = await fetch(`${API_BASE}${path}`);
-  return parseResponse<TResponse>(response);
-}
-
-async function postJson<TResponse>(path: string, body: object): Promise<TResponse> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return parseResponse<TResponse>(response);
-}
-
-async function putJson<TResponse>(path: string, body: object): Promise<TResponse> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return parseResponse<TResponse>(response);
-}
-
-async function parseResponse<TResponse>(response: Response): Promise<TResponse> {
+async function api<T = unknown>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, { headers: { "Content-Type": "application/json", ...options?.headers }, ...options });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof data.detail === "string" ? data.detail : "Запрос к backend завершился ошибкой";
-    throw new Error(detail);
-  }
-  return data as TResponse;
+  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Backend request failed");
+  return data as T;
 }
-
-function policyToForm(policy: AutomationPolicy): PolicyForm {
-  return {
-    automation_enabled: policy.automation_enabled,
-    mode: policy.mode,
-    max_tx_value_usd: String(policy.max_tx_value_usd),
-    daily_limit_usd: String(policy.daily_limit_usd),
-    max_transactions_per_hour: String(policy.max_transactions_per_hour),
-    min_native_balance_wei: policy.min_native_balance_wei,
-    require_confirmation_above_usd: String(policy.require_confirmation_above_usd),
-    allowed_chain_ids: policy.allowed_chain_ids.join(", "),
-    allowed_tokens: policy.allowed_tokens.join(", "),
-    allowed_recipients: policy.allowed_recipients.join(", "),
-    allowed_actions: policy.allowed_actions.join(", "),
-    emergency_stop: policy.emergency_stop,
-  };
-}
-
-function buildPolicyPayload(form: PolicyForm) {
-  return {
-    automation_enabled: form.automation_enabled,
-    mode: form.mode,
-    max_tx_value_usd: Number(form.max_tx_value_usd),
-    daily_limit_usd: Number(form.daily_limit_usd),
-    max_transactions_per_hour: Number(form.max_transactions_per_hour),
-    min_native_balance_wei: form.min_native_balance_wei,
-    require_confirmation_above_usd: Number(form.require_confirmation_above_usd),
-    allowed_chain_ids: splitList(form.allowed_chain_ids).map((item) => Number(item)).filter((item) => Number.isFinite(item)),
-    allowed_tokens: splitList(form.allowed_tokens),
-    allowed_recipients: splitList(form.allowed_recipients),
-    allowed_actions: splitList(form.allowed_actions),
-    emergency_stop: form.emergency_stop,
-  };
-}
-
-function buildActionPayload(form: ActionForm) {
-  return {
-    action_type: form.action_type,
-    to_address: form.recipient,
-    token_address: form.token || null,
-    value_wei: form.value_wei,
-    value_usd: Number(form.value_usd),
-    chain_id: Number(form.chain_id),
-    reason: form.reason,
-    metadata: { source: "frontend_minimal_automation_ux" },
-  };
-}
-
-function splitList(value: string) {
-  return value.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
-}
-
-function shortAddress(address: string): string {
-  if (address.length <= 12) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
-function formatUsd(value: number): string {
-  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
-}
-
-function readableError(error: unknown): string {
-  const maybe = error as { code?: number; message?: string };
-  const message = maybe?.message ?? String(error);
-  const lower = message.toLowerCase();
-  if (maybe?.code === 4001 || lower.includes("user rejected") || lower.includes("rejected")) {
-    return "Пользователь отклонил запрос в MetaMask.";
-  }
-  if (lower.includes("failed to fetch")) {
-    return "Backend недоступен. Запустите uvicorn app.main:app --reload на http://127.0.0.1:8000.";
-  }
-  if (lower.includes("insufficient funds")) {
-    return "Недостаточно средств для газа или суммы транзакции.";
-  }
-  if (lower.includes("chain")) {
-    return `Проверьте сеть MetaMask. Текущий/ожидаемый Chain ID должен совпадать с настройками действия.`;
-  }
-  return message;
+function shortAddress(address: string) { return address.length > 13 ? `${address.slice(0, 7)}…${address.slice(-5)}` : address; }
+function formatUsd(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
+function dateLabel(value: string) { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value.replace(" ", "T") + (value.includes("T") ? "" : "Z"))); }
+function titleCase(value: string) { return value.split("_").map((word) => word[0].toUpperCase() + word.slice(1)).join(" "); }
+function readableError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes("failed to fetch") ? "Backend is offline. Start FastAPI on port 8000." : message;
 }

@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 agentic_economy.db
 server.log
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo

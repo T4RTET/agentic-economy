@@ -82,7 +82,18 @@ The backend does not ask for seed phrases, does not accept private keys, and doe
 
 Never paste a seed phrase into this app.
 
-## Minimal User Action Automation Flow
+## Presentation Demo Flow
+
+The frontend is a complete Agent Reputation Passport demo backed by the live API:
+
+1. Compare Low, Medium, and High risk agents in the directory.
+2. Open a passport and explain the Trust Score, Risk Level, wallet limit, and score factors.
+3. Show verifiable action history, onchain evidence, and complaints.
+4. Add a successful or failed action and show the score update immediately.
+5. Submit a complaint and show the new public risk signal.
+6. Connect MetaMask to find a wallet-linked passport or issue a new one.
+
+## Optional Smart Account Automation Flow
 
 The frontend now has a simplified Russian-language setup path for automation:
 
@@ -107,7 +118,7 @@ See `API_CONTRACT.md` for frontend integration details.
 
 ## Frontend
 
-The minimal MetaMask test frontend lives in `frontend/`.
+The complete passport demo frontend lives in `frontend/`.
 
 ```powershell
 cd frontend
