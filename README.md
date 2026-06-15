@@ -1,5 +1,7 @@
 # Agent Reputation Passport
 
+![Agent Reputation Passport logo](agent-reputation-passport-logo.png)
+
 **A verifiable trust and risk layer for autonomous AI agents on Mantle.**
 
 [Live Demo](https://agentic-economy-passport-demo-2026.onrender.com) ·
@@ -105,13 +107,9 @@ Risk levels:
 
 ## Team Responsibilities
 
-The project is built by a three-person team with separate ownership areas:
+The project is built by a two-person team. Both members collaborated across the full product: product design, frontend, backend, reputation scoring, wallet security, Mantle integration, marketplace flow, testing, deployment, research, and presentation.
 
-- **Backend and reputation infrastructure:** database, API, scoring, Mantle integration, wallet security, deployment.
-- **Product and frontend experience:** passport UI, directory, marketplace, responsive demo-flow.
-- **Research and presentation:** product positioning, validation, hackathon materials, and demo narrative.
-
-Replace these role descriptions with member names in the DoraHacks submission.
+Replace this description with member names in the DoraHacks submission.
 
 ## Local Development
 

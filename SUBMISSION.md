@@ -72,11 +72,12 @@ Potential business models include verification fees, premium monitoring, marketp
 
 ## Team
 
-Add the three member names and links before submission:
+Two-person team. Both members collaborated across product design, frontend, backend, reputation scoring, wallet security, Mantle integration, marketplace flow, testing, deployment, research, and presentation.
 
-1. Backend and reputation infrastructure: `[name / contact]`
-2. Product and frontend experience: `[name / contact]`
-3. Research and presentation: `[name / contact]`
+Add both member names and links before submission:
+
+1. `[name / contact]`
+2. `[name / contact]`
 
 ## Future Roadmap
 

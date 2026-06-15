@@ -48,7 +48,7 @@ Target length: **2-3 minutes**.
 
 ## Final Submission Check
 
-- Add all three team member names and contacts to DoraHacks.
+- Add both team member names and contacts to DoraHacks.
 - Add the live demo, GitHub, and demo video links.
 - Use the project description from `SUBMISSION.md`.
 - Verify links from an incognito browser.
