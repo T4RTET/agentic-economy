@@ -1,19 +1,119 @@
-# Agentic Economy Backend
+# Agent Reputation Passport
 
-FastAPI + SQLite backend for the Agent Reputation Passport MVP.
+**A verifiable trust and risk layer for autonomous AI agents on Mantle.**
 
-## What it does
+[Live Demo](https://agentic-economy-passport-demo-2026.onrender.com) ·
+[Swagger API](https://agentic-economy-passport-api-2026.onrender.com/docs) ·
+[Mantle Connection](https://agentic-economy-passport-api-2026.onrender.com/mantle/status) ·
+[API Contract](API_CONTRACT.md)
 
-- Stores AI agents, completed actions, complaints, and audit entries.
-- Calculates Trust Score, Risk Level, score breakdown, and recommended wallet limit from wallet verification, transaction history, transaction quality, activity frequency, on-chain evidence, task diversity, value experience, and complaints.
-- Verifies MetaMask wallet ownership with signed messages.
-- Keeps the legacy wallet connect endpoint available for demo flows.
-- Adds configurable MetaMask Smart Account / Delegation automation policies for safe automatic transaction preparation.
-- Exposes a frontend-friendly API for a Vite React demo flow.
-- Keeps marketplace/rental endpoints available as phase 2 backend groundwork.
-- Ships with demo seed data for three agents: Low, Medium, and High risk.
+AI agents are beginning to manage wallets, execute DeFi actions, hire other agents, and complete paid tasks. Before giving an agent access to money, users need more than a name and a promise.
 
-## Quick start
+Agent Reputation Passport turns an agent's wallet identity, transaction history, execution quality, complaints, and marketplace work into an explainable trust decision:
+
+- **Trust Score:** transparent score from `0..100`;
+- **Risk Level:** Low, Medium, or High;
+- **Recommended Wallet Limit:** a safe suggested capital limit;
+- **Verifiable History:** actions, outcomes, values, and Mantle transaction evidence;
+- **Public Risk Signals:** complaints, disputes, and failed actions;
+- **Agent Marketplace:** hire agents based on evidence instead of marketing claims.
+
+## Live Product
+
+The public demo includes three deliberately different profiles:
+
+| Agent | Profile | What it demonstrates |
+|---|---|---|
+| YieldPilot Alpha | Low Risk | Strong execution history and higher wallet limit |
+| SwapScout Beta | Medium Risk | Mixed outcomes and capped permissions |
+| LeverageHawk Gamma | High Risk | Failures, complaints, and restricted marketplace access |
+
+The UI supports the complete flow: browse agents, inspect passports, connect and verify a MetaMask wallet, record actions and complaints, and rent eligible agents.
+
+## Why Mantle
+
+Mantle provides the settlement and evidence layer for agent activity.
+
+- The backend connects directly to Mantle mainnet JSON-RPC and verifies Chain ID `5000`.
+- Transaction verification reads transaction and receipt evidence directly from Mantle RPC.
+- Verified wallet owners can import indexed wallet history without duplicate events.
+- Every known transaction hash links to Mantle Explorer.
+- Synced history immediately recalculates Trust Score, Risk Level, and wallet limit.
+
+Full indexed wallet-history sync requires `ETHERSCAN_API_KEY`. Direct Mantle RPC status and transaction verification work without it.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    User["User / Agent Owner"] --> Web["React Passport UI"]
+    Web --> Auth["Wallet Signature Auth"]
+    Web --> API["FastAPI Backend"]
+    Auth --> MM["MetaMask"]
+    API --> DB[("SQLite MVP Store")]
+    API --> Score["Reputation Engine"]
+    API --> Market["Agent Marketplace"]
+    API --> RPC["Mantle JSON-RPC"]
+    API --> Indexer["Indexed History API"]
+    RPC --> Explorer["Mantle Explorer"]
+    DB --> Score
+    Score --> Web
+    Market --> Score
+```
+
+### Trust Score Factors
+
+The score is explainable and capped to `0..100`.
+
+| Factor | Maximum |
+|---|---:|
+| Agent creation history | 10 |
+| Verified wallet ownership | 10 |
+| Transaction count | 15 |
+| Transaction quality | 30 |
+| Transaction frequency | 10 |
+| Onchain evidence | 10 |
+| Task diversity | 5 |
+| Successfully handled value | 10 |
+| Complaint health | 10 |
+
+Risk levels:
+
+- **Low:** Trust Score `>= 75`
+- **Medium:** Trust Score `50..74`
+- **High:** Trust Score `< 50`
+
+## Security Model
+
+- Wallet ownership uses a short-lived, one-time nonce and MetaMask signature.
+- Nonces expire and cannot be reused.
+- Signatures never authorize transfers.
+- The backend never requests seed phrases or private keys.
+- Mantle history sync requires verified wallet ownership.
+- Duplicate transaction hashes are rejected during sync.
+- Smart Account policies can enforce value, frequency, chain, recipient, and token limits.
+- API rate limiting and readiness checks are enabled.
+
+## Technology
+
+- **Frontend:** React, TypeScript, Vite
+- **Backend:** FastAPI, Pydantic, SQLite
+- **Wallet:** MetaMask signature verification with `eth-account`
+- **Blockchain:** Mantle mainnet JSON-RPC and Mantle Explorer
+- **Deployment:** Render Blueprint, Docker
+- **Testing:** Pytest, FastAPI TestClient, production frontend build
+
+## Team Responsibilities
+
+The project is built by a three-person team with separate ownership areas:
+
+- **Backend and reputation infrastructure:** database, API, scoring, Mantle integration, wallet security, deployment.
+- **Product and frontend experience:** passport UI, directory, marketplace, responsive demo-flow.
+- **Research and presentation:** product positioning, validation, hackathon materials, and demo narrative.
+
+Replace these role descriptions with member names in the DoraHacks submission.
+
+## Local Development
 
 ```powershell
 python -m venv .venv
@@ -23,108 +123,7 @@ python -m app.seed
 uvicorn app.main:app --reload
 ```
 
-Open Swagger UI at:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-## API
-
-- `GET /health`
-- `GET /ready`
-- `GET /mantle/status`
-- `POST /mantle/transactions/verify`
-- `POST /mantle/agents/{agent_id}/sync`
-- `GET /project/hackathon-alignment`
-- `POST /auth/nonce`
-- `POST /auth/verify`
-- `POST /wallet/connect`
-- `GET /wallet/{wallet_address}/passport`
-- `GET /agents`
-- `POST /agents`
-- `GET /agents/{agent_id}/passport`
-- `GET /agents/{agent_id}/intelligence`
-- `POST /agents/{agent_id}/events`
-- `POST /agents/{agent_id}/complaints`
-- `PATCH /agents/{agent_id}/complaints/{complaint_id}`
-- `GET /agents/{agent_id}/reputation`
-- `GET /agents/{agent_id}/automation-policy`
-- `PUT /agents/{agent_id}/automation-policy`
-- `POST /agents/{agent_id}/automation-policy/evaluate`
-- `POST /agents/{agent_id}/automation/delegation/request`
-- `POST /agents/{agent_id}/automation/delegation/confirm`
-- `POST /agents/{agent_id}/transactions/execute-automated`
-- `GET /marketplace/listings`
-- `POST /marketplace/agents/{agent_id}/listing`
-- `POST /marketplace/listings/{listing_id}/rent`
-- `GET /marketplace/rentals/{rental_id}`
-- `GET /marketplace/rentals?renter_wallet=0x...`
-- `POST /marketplace/rentals/{rental_id}/complete`
-- `POST /marketplace/rentals/{rental_id}/dispute`
-- `POST /marketplace/rentals/{rental_id}/cancel`
-- `POST /demo/reset`
-
-`POST /wallet/connect` remains available for backward-compatible demos. Frontends should use `POST /auth/nonce` followed by `POST /auth/verify` for secure MetaMask wallet ownership verification.
-
-## Smart Account Automation
-
-Normal MetaMask EOA wallets cannot silently auto-confirm transactions. Every normal wallet transaction still needs user approval in MetaMask.
-
-Automatic execution without sharing a seed phrase requires MetaMask Smart Accounts / Delegation / Advanced Permissions. Automation policies support:
-
-- max transaction value
-- daily spend limit
-- transactions per hour
-- minimum remaining native balance
-- allowed chain IDs
-- allowed tokens
-- allowed recipients
-- allowed action types
-- emergency stop
-- delegation metadata and status
-
-The backend does not ask for seed phrases, does not accept private keys, and does not sign user-wallet transactions. It evaluates policy and returns either a normal MetaMask transaction request for user confirmation or a Smart Account execution payload for the frontend to submit through MetaMask Smart Accounts tooling.
-
-Never paste a seed phrase into this app.
-
-## Presentation Demo Flow
-
-The frontend is a complete Agent Reputation Passport demo backed by the live API:
-
-1. Compare Low, Medium, and High risk agents in the directory.
-2. Open a passport and explain the Trust Score, Risk Level, wallet limit, and score factors.
-3. Show verifiable action history, onchain evidence, and complaints.
-4. Add a successful or failed action and show the score update immediately.
-5. Submit a complaint and show the new public risk signal.
-6. Connect MetaMask to find a wallet-linked passport or issue a new one.
-
-## Optional Smart Account Automation Flow
-
-The frontend now has a simplified Russian-language setup path for automation:
-
-1. Open `http://localhost:5173`.
-2. Click `Connect MetaMask`.
-3. Click `Verify Wallet` and sign the ownership message in MetaMask.
-4. Choose the `Safe`, `Balanced`, or `Custom` automation preset.
-5. Click `Enable Automation / Включить автоматизацию`.
-6. Confirm Smart Account / Delegation in MetaMask when a real SDK is connected.
-7. For local backend/UI testing, click `Confirm Test Delegation` to store test delegation metadata.
-8. The agent can then evaluate automated actions and only act inside policy limits.
-
-Safety notes:
-
-- Do not enter a seed phrase.
-- Do not enter a private key.
-- A normal MetaMask EOA cannot silently auto-confirm transactions.
-- Real automation requires MetaMask Smart Account / Delegation.
-- Test Delegation is only for local backend flow testing.
-
-See `API_CONTRACT.md` for frontend integration details.
-
-## Frontend
-
-The complete passport demo frontend lives in `frontend/`.
+In another terminal:
 
 ```powershell
 cd frontend
@@ -132,40 +131,46 @@ npm install
 npm run dev
 ```
 
-Run the backend first:
-
-```powershell
-uvicorn app.main:app --reload
-```
-
 Open:
 
-```text
-http://localhost:5173
-```
+- Frontend: `http://localhost:5173`
+- Swagger: `http://127.0.0.1:8000/docs`
 
-MetaMask must be installed in the browser.
+Copy `.env.example` to configure Mantle RPC, indexed history, CORS, rate limiting, and database location.
 
-## Mantle Sync
+## Main API
 
-Transaction verification uses the public Mantle JSON-RPC endpoint directly. Full wallet-history discovery requires an indexed API because standard Ethereum JSON-RPC cannot search every transaction by wallet address.
+| Area | Endpoints |
+|---|---|
+| Health | `GET /health`, `GET /ready` |
+| Mantle | `GET /mantle/status`, `POST /mantle/transactions/verify`, `POST /mantle/agents/{id}/sync` |
+| Wallet auth | `POST /auth/nonce`, `POST /auth/verify` |
+| Passports | `GET /agents`, `GET /agents/{id}/passport`, `GET /agents/{id}/reputation` |
+| Evidence | `POST /agents/{id}/events`, `POST /agents/{id}/complaints` |
+| Marketplace | `GET /marketplace/listings`, rental complete/dispute/cancel endpoints |
+| Automation | policy evaluation, delegation, and guarded transaction preparation |
 
-Set `ETHERSCAN_API_KEY` to enable `POST /mantle/agents/{agent_id}/sync`. The endpoint:
+See [API_CONTRACT.md](API_CONTRACT.md) for request and response examples.
 
-- requires prior wallet ownership verification through `/auth/nonce` and `/auth/verify`;
-- imports indexed Mantle transactions;
-- skips already-known transaction hashes;
-- stores explorer-ready evidence;
-- recalculates the passport immediately.
+## Deployment
 
-Copy `.env.example` for all runtime settings.
+`render.yaml` deploys both the public API and static frontend as one Render Blueprint. The free demo uses ephemeral SQLite and automatically restores seed agents after a cold restart.
 
-## Production
+Before a live presentation, open the public demo about one minute early because free Render services may sleep after inactivity.
 
-`render.yaml` deploys both the API and static frontend as a one-click Render Blueprint. The free demo deployment uses ephemeral SQLite and automatically restores seed data after a cold restart. Use a persistent disk or migrate the repository layer to PostgreSQL after the hackathon.
+## Current MVP Limits
 
-## Tests
+- Indexed wallet-history sync needs an external API key.
+- Synced native transfers currently do not have automatic USD price enrichment.
+- Free deployment storage is ephemeral.
+- Marketplace payment settlement and production authentication are future work.
+
+## Verification
 
 ```powershell
 python -m pytest tests -p no:cacheprovider
+cd frontend
+npm run build
 ```
+
+Current result: **45 backend tests passing** and successful frontend production build.
