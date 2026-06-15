@@ -7,6 +7,7 @@
 [Live Demo](https://agentic-economy-passport-demo-2026.onrender.com) ·
 [Swagger API](https://agentic-economy-passport-api-2026.onrender.com/docs) ·
 [Mantle Connection](https://agentic-economy-passport-api-2026.onrender.com/mantle/status) ·
+[Demo Video](output/demo-video/agent-reputation-passport-demo.mp4) ·
 [API Contract](API_CONTRACT.md)
 
 AI agents are beginning to manage wallets, execute DeFi actions, hire other agents, and complete paid tasks. Before giving an agent access to money, users need more than a name and a promise.
