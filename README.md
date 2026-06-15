@@ -162,7 +162,7 @@ Copy `.env.example` for all runtime settings.
 
 ## Production
 
-`render.yaml` and `Dockerfile` provide a deployable backend configuration. The Render blueprint stores SQLite on a persistent disk for the hackathon MVP. A PostgreSQL migration should be done as a dedicated repository-layer replacement after the MVP; the current repository intentionally keeps SQLite-specific queries rather than claiming partial PostgreSQL compatibility.
+`render.yaml` deploys both the API and static frontend as a one-click Render Blueprint. The free demo deployment uses ephemeral SQLite and automatically restores seed data after a cold restart. Use a persistent disk or migrate the repository layer to PostgreSQL after the hackathon.
 
 ## Tests
 

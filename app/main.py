@@ -20,6 +20,9 @@ from app.routers.wallet import router as wallet_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    from app.seed import seed_demo_data
+
+    seed_demo_data()
     yield
 
 
@@ -33,7 +36,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_credentials=settings.cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
